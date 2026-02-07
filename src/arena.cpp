@@ -21,7 +21,7 @@ static ArenaNode *arena_block_make(u64 capacity) {
     capacity = page;
   }
 
-  ArenaNode *a = (ArenaNode *)mem_alloc(offsetof(ArenaNode, buf[capacity]));
+  ArenaNode *a = (ArenaNode *)mem_alloc(offsetof(ArenaNode, buf) + capacity);
   a->next = nullptr;
   a->allocd = 0;
   a->capacity = capacity;

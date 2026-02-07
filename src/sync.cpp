@@ -125,7 +125,7 @@ void Sema::post(int n) {
 
 void Sema::wait() { sem_wait(sem); }
 
-Thread::make(ThreadProc fn, void *udata) {
+void Thread::make(ThreadProc fn, void *udata) {
   pthread_t pt = {};
   pthread_create(&pt, nullptr, (void *(*)(void *))fn, udata);
   ptr = (void *)pt;

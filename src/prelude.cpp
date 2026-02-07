@@ -3,8 +3,8 @@
 void *DebugAllocator::alloc(size_t bytes, const char *file, i32 line) {
   LockGuard lock{&mtx};
 
-  DebugAllocInfo *info =
-      (DebugAllocInfo *)malloc(offsetof(DebugAllocInfo, buf[bytes]));
+    DebugAllocInfo *info =
+      (DebugAllocInfo *)malloc(offsetof(DebugAllocInfo, buf) + bytes);
   info->file = file;
   info->line = line;
   info->size = bytes;

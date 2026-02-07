@@ -387,9 +387,8 @@ static void cleanup() {
   if (allocator != nullptr) {
     allocator->dump_allocs();
   }
-#endif
-
   allocator->trash();
+#endif
   operator delete(g_allocator);
 
 #ifndef NDEBUG

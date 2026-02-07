@@ -68,17 +68,27 @@ set(LUASOCKET
   src/deps/luasocket/udp.c
 )
 
+message(STATUS "Platform flags: EMSCRIPTEN=${EMSCRIPTEN}, WIN32=${WIN32}, UNIX=${UNIX}, MINGW=${MINGW}, MSYS=${MSYS}")
+
 if(EMSCRIPTEN)
+  message(STATUS "Detected platform: Emscripten")
   set(LUASOCKET)
   add_compile_definitions(LUA_USE_LONGJMP LUA_USE_POSIX)
   set(CFLAGS -fno-exceptions)
   set(LFLAGS -lpthread -sASYNCIFY -sALLOW_MEMORY_GROWTH -sUSE_WEBGL2)
 
+elseif(MINGW)
+  message(STATUS "Detected platform: MinGW")
+  set(LUASOCKET ${LUASOCKET} src/deps/luasocket/wsocket.c)
+  add_compile_definitions(LUA_USE_LONGJMP)
+
 elseif(WIN32)
+  message(STATUS "Detected platform: Windows")
   set(LUASOCKET ${LUASOCKET} src/deps/luasocket/wsocket.c)
   add_compile_definitions(LUA_USE_LONGJMP)
 
 elseif(UNIX)
+  message(STATUS "Detected platform: Unix")
   set(LUASOCKET
     ${LUASOCKET}
     src/deps/luasocket/serial.c
