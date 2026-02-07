@@ -2118,6 +2118,7 @@ inline void sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
         #include <xf86drm.h>
         #include <xf86drmMode.h>
         #include <gbm.h>
+        #include <dlfcn.h>
         #include <EGL/egl.h>
         #include <xkbcommon/xkbcommon.h>
         #include <libinput.h>
@@ -2713,6 +2714,129 @@ typedef struct {
     EGLSurface surface;
     EGLConfig config;
 } _sapp_drm_egl_t;
+
+/* ============================================================
+   DRM/GBM dynamic loading via dlopen
+   On retro handhelds the installed libdrm / libgbm may be an
+   older version that lacks some symbols (e.g. atomic modesetting).
+   We load every function through dlsym so we can:
+     1. avoid a hard link-time dependency
+     2. gracefully degrade when optional symbols are absent
+   ============================================================ */
+typedef struct {
+    void* handle_drm;
+    void* handle_gbm;
+    struct {
+        /* core (xf86drm.h) */
+        int (*SetClientCap)(int fd, uint64_t capability, uint64_t value);
+        int (*HandleEvent)(int fd, drmEventContextPtr evctx);
+        /* mode resources (xf86drmMode.h) */
+        drmModeResPtr (*ModeGetResources)(int fd);
+        void (*ModeFreeResources)(drmModeResPtr ptr);
+        drmModeConnectorPtr (*ModeGetConnector)(int fd, uint32_t connectorId);
+        void (*ModeFreeConnector)(drmModeConnectorPtr ptr);
+        drmModeEncoderPtr (*ModeGetEncoder)(int fd, uint32_t encoder_id);
+        void (*ModeFreeEncoder)(drmModeEncoderPtr ptr);
+        drmModeCrtcPtr (*ModeGetCrtc)(int fd, uint32_t crtcId);
+        void (*ModeFreeCrtc)(drmModeCrtcPtr ptr);
+        int (*ModeSetCrtc)(int fd, uint32_t crtcId, uint32_t bufferId,
+            uint32_t x, uint32_t y, uint32_t *connectors, int count,
+            drmModeModeInfoPtr mode);
+        drmModeObjectPropertiesPtr (*ModeObjectGetProperties)(int fd,
+            uint32_t object_id, uint32_t object_type);
+        void (*ModeFreeObjectProperties)(drmModeObjectPropertiesPtr ptr);
+        drmModePropertyPtr (*ModeGetProperty)(int fd, uint32_t propertyId);
+        void (*ModeFreeProperty)(drmModePropertyPtr ptr);
+        drmModePlaneResPtr (*ModeGetPlaneResources)(int fd);
+        void (*ModeFreePlaneResources)(drmModePlaneResPtr ptr);
+        drmModePlanePtr (*ModeGetPlane)(int fd, uint32_t plane_id);
+        void (*ModeFreePlane)(drmModePlanePtr ptr);
+        int (*ModeAddFB)(int fd, uint32_t width, uint32_t height,
+            uint8_t depth, uint8_t bpp, uint32_t pitch,
+            uint32_t bo_handle, uint32_t *buf_id);
+        int (*ModeRmFB)(int fd, uint32_t bufferId);
+        int (*ModePageFlip)(int fd, uint32_t crtc_id, uint32_t fb_id,
+            uint32_t flags, void *user_data);
+        /* atomic modesetting — optional, may be NULL on old libdrm */
+        int (*ModeCreatePropertyBlob)(int fd, const void *data,
+            size_t length, uint32_t *id);
+        int (*ModeDestroyPropertyBlob)(int fd, uint32_t id);
+        drmModeAtomicReqPtr (*ModeAtomicAlloc)(void);
+        int (*ModeAtomicAddProperty)(drmModeAtomicReqPtr req,
+            uint32_t object_id, uint32_t property_id, uint64_t value);
+        int (*ModeAtomicCommit)(int fd, drmModeAtomicReqPtr req,
+            uint32_t flags, void *user_data);
+        void (*ModeAtomicFree)(drmModeAtomicReqPtr req);
+    } drm;
+    struct {
+        struct gbm_device* (*create_device)(int fd);
+        void (*device_destroy)(struct gbm_device *gbm);
+        struct gbm_surface* (*surface_create)(struct gbm_device *gbm,
+            uint32_t width, uint32_t height, uint32_t format, uint32_t flags);
+        void (*surface_destroy)(struct gbm_surface *surf);
+        struct gbm_bo* (*surface_lock_front_buffer)(struct gbm_surface *surf);
+        void (*surface_release_buffer)(struct gbm_surface *surf,
+            struct gbm_bo *bo);
+        void* (*bo_get_user_data)(struct gbm_bo *bo);
+        void (*bo_set_user_data)(struct gbm_bo *bo, void *data,
+            void (*destroy_user_data)(struct gbm_bo *, void *));
+        uint32_t (*bo_get_width)(struct gbm_bo *bo);
+        uint32_t (*bo_get_height)(struct gbm_bo *bo);
+        union gbm_bo_handle (*bo_get_handle)(struct gbm_bo *bo);
+        uint32_t (*bo_get_stride)(struct gbm_bo *bo);
+    } gbm;
+} _sapp_drm_libs_t;
+
+static _sapp_drm_libs_t _sapp_drm_libs;
+
+/* Redirect every DRM / GBM call through the function-pointer table.
+   The macros are defined AFTER the headers have been processed, so the
+   original extern declarations are unaffected.  All subsequent code in
+   this translation unit (the DRM backend) will call through dlopen'd
+   pointers instead of linking directly.                               */
+
+/* --- libdrm --- */
+#define drmSetClientCap              _sapp_drm_libs.drm.SetClientCap
+#define drmHandleEvent               _sapp_drm_libs.drm.HandleEvent
+#define drmModeGetResources          _sapp_drm_libs.drm.ModeGetResources
+#define drmModeFreeResources         _sapp_drm_libs.drm.ModeFreeResources
+#define drmModeGetConnector          _sapp_drm_libs.drm.ModeGetConnector
+#define drmModeFreeConnector         _sapp_drm_libs.drm.ModeFreeConnector
+#define drmModeGetEncoder            _sapp_drm_libs.drm.ModeGetEncoder
+#define drmModeFreeEncoder           _sapp_drm_libs.drm.ModeFreeEncoder
+#define drmModeGetCrtc               _sapp_drm_libs.drm.ModeGetCrtc
+#define drmModeFreeCrtc              _sapp_drm_libs.drm.ModeFreeCrtc
+#define drmModeSetCrtc               _sapp_drm_libs.drm.ModeSetCrtc
+#define drmModeObjectGetProperties   _sapp_drm_libs.drm.ModeObjectGetProperties
+#define drmModeFreeObjectProperties  _sapp_drm_libs.drm.ModeFreeObjectProperties
+#define drmModeGetProperty           _sapp_drm_libs.drm.ModeGetProperty
+#define drmModeFreeProperty          _sapp_drm_libs.drm.ModeFreeProperty
+#define drmModeGetPlaneResources     _sapp_drm_libs.drm.ModeGetPlaneResources
+#define drmModeFreePlaneResources    _sapp_drm_libs.drm.ModeFreePlaneResources
+#define drmModeGetPlane              _sapp_drm_libs.drm.ModeGetPlane
+#define drmModeFreePlane             _sapp_drm_libs.drm.ModeFreePlane
+#define drmModeAddFB                 _sapp_drm_libs.drm.ModeAddFB
+#define drmModeRmFB                  _sapp_drm_libs.drm.ModeRmFB
+#define drmModePageFlip              _sapp_drm_libs.drm.ModePageFlip
+#define drmModeCreatePropertyBlob    _sapp_drm_libs.drm.ModeCreatePropertyBlob
+#define drmModeDestroyPropertyBlob   _sapp_drm_libs.drm.ModeDestroyPropertyBlob
+#define drmModeAtomicAlloc           _sapp_drm_libs.drm.ModeAtomicAlloc
+#define drmModeAtomicAddProperty     _sapp_drm_libs.drm.ModeAtomicAddProperty
+#define drmModeAtomicCommit          _sapp_drm_libs.drm.ModeAtomicCommit
+#define drmModeAtomicFree            _sapp_drm_libs.drm.ModeAtomicFree
+/* --- libgbm --- */
+#define gbm_create_device            _sapp_drm_libs.gbm.create_device
+#define gbm_device_destroy           _sapp_drm_libs.gbm.device_destroy
+#define gbm_surface_create           _sapp_drm_libs.gbm.surface_create
+#define gbm_surface_destroy          _sapp_drm_libs.gbm.surface_destroy
+#define gbm_surface_lock_front_buffer _sapp_drm_libs.gbm.surface_lock_front_buffer
+#define gbm_surface_release_buffer   _sapp_drm_libs.gbm.surface_release_buffer
+#define gbm_bo_get_user_data         _sapp_drm_libs.gbm.bo_get_user_data
+#define gbm_bo_set_user_data         _sapp_drm_libs.gbm.bo_set_user_data
+#define gbm_bo_get_width             _sapp_drm_libs.gbm.bo_get_width
+#define gbm_bo_get_height            _sapp_drm_libs.gbm.bo_get_height
+#define gbm_bo_get_handle            _sapp_drm_libs.gbm.bo_get_handle
+#define gbm_bo_get_stride            _sapp_drm_libs.gbm.bo_get_stride
 
 #elif defined(_SAPP_WAYLAND)
 
@@ -11366,6 +11490,121 @@ _SOKOL_PRIVATE void _sapp_linux_run(const sapp_desc* desc) {
 */
 
 /* ============================================================
+   DRM/GBM dynamic library loading
+   ============================================================ */
+_SOKOL_PRIVATE bool _sapp_drm_load_libs(void) {
+    _sapp_clear(&_sapp_drm_libs, sizeof(_sapp_drm_libs));
+
+    /* --- load libdrm --- */
+    const char* drm_names[] = { "libdrm.so.2", "libdrm.so", NULL };
+    for (int i = 0; drm_names[i]; i++) {
+        _sapp_drm_libs.handle_drm = dlopen(drm_names[i], RTLD_LAZY | RTLD_LOCAL);
+        if (_sapp_drm_libs.handle_drm) break;
+    }
+    if (!_sapp_drm_libs.handle_drm) {
+        _SAPP_ERROR(LINUX_DRM_OPEN_DEVICE_FAILED); /* repurpose: cannot load libdrm */
+        return false;
+    }
+
+    /* --- load libgbm --- */
+    const char* gbm_names[] = { "libgbm.so.1", "libgbm.so", NULL };
+    for (int i = 0; gbm_names[i]; i++) {
+        _sapp_drm_libs.handle_gbm = dlopen(gbm_names[i], RTLD_LAZY | RTLD_LOCAL);
+        if (_sapp_drm_libs.handle_gbm) break;
+    }
+    if (!_sapp_drm_libs.handle_gbm) {
+        _SAPP_ERROR(LINUX_DRM_GBM_DEVICE_FAILED); /* repurpose: cannot load libgbm */
+        dlclose(_sapp_drm_libs.handle_drm);
+        return false;
+    }
+
+    void* drm = _sapp_drm_libs.handle_drm;
+    void* gbm = _sapp_drm_libs.handle_gbm;
+
+    /* --- resolve libdrm core symbols (required) --- */
+    #define _SAPP_DRM_DLSYM(member, name) \
+        _sapp_drm_libs.drm.member = (__typeof__(_sapp_drm_libs.drm.member))dlsym(drm, name)
+    _SAPP_DRM_DLSYM(SetClientCap,            "drmSetClientCap");
+    _SAPP_DRM_DLSYM(HandleEvent,             "drmHandleEvent");
+    _SAPP_DRM_DLSYM(ModeGetResources,        "drmModeGetResources");
+    _SAPP_DRM_DLSYM(ModeFreeResources,       "drmModeFreeResources");
+    _SAPP_DRM_DLSYM(ModeGetConnector,        "drmModeGetConnector");
+    _SAPP_DRM_DLSYM(ModeFreeConnector,       "drmModeFreeConnector");
+    _SAPP_DRM_DLSYM(ModeGetEncoder,          "drmModeGetEncoder");
+    _SAPP_DRM_DLSYM(ModeFreeEncoder,         "drmModeFreeEncoder");
+    _SAPP_DRM_DLSYM(ModeGetCrtc,             "drmModeGetCrtc");
+    _SAPP_DRM_DLSYM(ModeFreeCrtc,            "drmModeFreeCrtc");
+    _SAPP_DRM_DLSYM(ModeSetCrtc,             "drmModeSetCrtc");
+    _SAPP_DRM_DLSYM(ModeObjectGetProperties, "drmModeObjectGetProperties");
+    _SAPP_DRM_DLSYM(ModeFreeObjectProperties,"drmModeFreeObjectProperties");
+    _SAPP_DRM_DLSYM(ModeGetProperty,         "drmModeGetProperty");
+    _SAPP_DRM_DLSYM(ModeFreeProperty,        "drmModeFreeProperty");
+    _SAPP_DRM_DLSYM(ModeGetPlaneResources,   "drmModeGetPlaneResources");
+    _SAPP_DRM_DLSYM(ModeFreePlaneResources,  "drmModeFreePlaneResources");
+    _SAPP_DRM_DLSYM(ModeGetPlane,            "drmModeGetPlane");
+    _SAPP_DRM_DLSYM(ModeFreePlane,           "drmModeFreePlane");
+    _SAPP_DRM_DLSYM(ModeAddFB,              "drmModeAddFB");
+    _SAPP_DRM_DLSYM(ModeRmFB,               "drmModeRmFB");
+    _SAPP_DRM_DLSYM(ModePageFlip,           "drmModePageFlip");
+    /* atomic modesetting — optional, may be absent on old libdrm */
+    _SAPP_DRM_DLSYM(ModeCreatePropertyBlob,  "drmModeCreatePropertyBlob");
+    _SAPP_DRM_DLSYM(ModeDestroyPropertyBlob, "drmModeDestroyPropertyBlob");
+    _SAPP_DRM_DLSYM(ModeAtomicAlloc,         "drmModeAtomicAlloc");
+    _SAPP_DRM_DLSYM(ModeAtomicAddProperty,   "drmModeAtomicAddProperty");
+    _SAPP_DRM_DLSYM(ModeAtomicCommit,        "drmModeAtomicCommit");
+    _SAPP_DRM_DLSYM(ModeAtomicFree,          "drmModeAtomicFree");
+    #undef _SAPP_DRM_DLSYM
+
+    /* verify essential DRM symbols are present */
+    if (!_sapp_drm_libs.drm.ModeGetResources || !_sapp_drm_libs.drm.ModeGetConnector ||
+        !_sapp_drm_libs.drm.ModeSetCrtc || !_sapp_drm_libs.drm.ModePageFlip ||
+        !_sapp_drm_libs.drm.HandleEvent || !_sapp_drm_libs.drm.ModeAddFB) {
+        _SAPP_ERROR(LINUX_DRM_OPEN_DEVICE_FAILED);
+        dlclose(_sapp_drm_libs.handle_gbm);
+        dlclose(_sapp_drm_libs.handle_drm);
+        return false;
+    }
+
+    /* --- resolve libgbm symbols (all required) --- */
+    #define _SAPP_GBM_DLSYM(member, name) \
+        _sapp_drm_libs.gbm.member = (__typeof__(_sapp_drm_libs.gbm.member))dlsym(gbm, name)
+    _SAPP_GBM_DLSYM(create_device,            "gbm_create_device");
+    _SAPP_GBM_DLSYM(device_destroy,           "gbm_device_destroy");
+    _SAPP_GBM_DLSYM(surface_create,           "gbm_surface_create");
+    _SAPP_GBM_DLSYM(surface_destroy,          "gbm_surface_destroy");
+    _SAPP_GBM_DLSYM(surface_lock_front_buffer,"gbm_surface_lock_front_buffer");
+    _SAPP_GBM_DLSYM(surface_release_buffer,   "gbm_surface_release_buffer");
+    _SAPP_GBM_DLSYM(bo_get_user_data,         "gbm_bo_get_user_data");
+    _SAPP_GBM_DLSYM(bo_set_user_data,         "gbm_bo_set_user_data");
+    _SAPP_GBM_DLSYM(bo_get_width,             "gbm_bo_get_width");
+    _SAPP_GBM_DLSYM(bo_get_height,            "gbm_bo_get_height");
+    _SAPP_GBM_DLSYM(bo_get_handle,            "gbm_bo_get_handle");
+    _SAPP_GBM_DLSYM(bo_get_stride,            "gbm_bo_get_stride");
+    #undef _SAPP_GBM_DLSYM
+
+    /* verify essential GBM symbols */
+    if (!_sapp_drm_libs.gbm.create_device || !_sapp_drm_libs.gbm.surface_create ||
+        !_sapp_drm_libs.gbm.surface_lock_front_buffer) {
+        _SAPP_ERROR(LINUX_DRM_GBM_DEVICE_FAILED);
+        dlclose(_sapp_drm_libs.handle_gbm);
+        dlclose(_sapp_drm_libs.handle_drm);
+        return false;
+    }
+
+    return true;
+}
+
+_SOKOL_PRIVATE void _sapp_drm_unload_libs(void) {
+    if (_sapp_drm_libs.handle_gbm) {
+        dlclose(_sapp_drm_libs.handle_gbm);
+    }
+    if (_sapp_drm_libs.handle_drm) {
+        dlclose(_sapp_drm_libs.handle_drm);
+    }
+    _sapp_clear(&_sapp_drm_libs, sizeof(_sapp_drm_libs));
+}
+
+/* ============================================================
    DRM key-to-sapp_keycode translation (linux evdev scancodes)
    ============================================================ */
 _SOKOL_PRIVATE void _sapp_drm_init_keytable(void) {
@@ -11583,11 +11822,15 @@ _SOKOL_PRIVATE bool _sapp_drm_setup(void) {
         return false;
     }
 
-    /* try atomic */
+    /* try atomic (only if the dlopen'd libdrm has atomic symbols) */
     _sapp.drm.atomic = false;
-    if (drmSetClientCap(_sapp.drm.fd, DRM_CLIENT_CAP_UNIVERSAL_PLANES, 1) == 0) {
-        if (drmSetClientCap(_sapp.drm.fd, DRM_CLIENT_CAP_ATOMIC, 1) == 0) {
-            _sapp.drm.atomic = true;
+    if (_sapp_drm_libs.drm.ModeAtomicAlloc && _sapp_drm_libs.drm.ModeAtomicAddProperty &&
+        _sapp_drm_libs.drm.ModeAtomicCommit && _sapp_drm_libs.drm.ModeAtomicFree &&
+        _sapp_drm_libs.drm.ModeCreatePropertyBlob) {
+        if (drmSetClientCap(_sapp.drm.fd, DRM_CLIENT_CAP_UNIVERSAL_PLANES, 1) == 0) {
+            if (drmSetClientCap(_sapp.drm.fd, DRM_CLIENT_CAP_ATOMIC, 1) == 0) {
+                _sapp.drm.atomic = true;
+            }
         }
     }
 
@@ -12030,6 +12273,13 @@ _SOKOL_PRIVATE void _sapp_drm_set_icon(const sapp_icon_desc* desc, int num_image
    ============================================================ */
 _SOKOL_PRIVATE void _sapp_linux_run_drm(const sapp_desc* desc) {
     _sapp_init_state(desc);
+
+    /* dynamically load libdrm + libgbm */
+    if (!_sapp_drm_load_libs()) {
+        _SAPP_PANIC(LINUX_DRM_OPEN_DEVICE_FAILED);
+        return;
+    }
+
     _sapp_drm_init_keytable();
 
     /* DRM device setup */
@@ -12158,7 +12408,7 @@ _SOKOL_PRIVATE void _sapp_linux_run_drm(const sapp_desc* desc) {
             &_sapp.drm.connector_id, 1, &_sapp.drm.saved_crtc->mode);
         drmModeFreeCrtc(_sapp.drm.saved_crtc);
     }
-    if (_sapp.drm.mode_blob_id) {
+    if (_sapp.drm.mode_blob_id && _sapp_drm_libs.drm.ModeDestroyPropertyBlob) {
         drmModeDestroyPropertyBlob(_sapp.drm.fd, _sapp.drm.mode_blob_id);
     }
     if (_sapp.drm.fd >= 0) close(_sapp.drm.fd);
@@ -12169,6 +12419,9 @@ _SOKOL_PRIVATE void _sapp_linux_run_drm(const sapp_desc* desc) {
     if (_sapp.drm.xkb_state) xkb_state_unref(_sapp.drm.xkb_state);
     if (_sapp.drm.xkb_keymap) xkb_keymap_unref(_sapp.drm.xkb_keymap);
     if (_sapp.drm.xkb_context) xkb_context_unref(_sapp.drm.xkb_context);
+
+    /* unload dynamically loaded libs */
+    _sapp_drm_unload_libs();
 
     /* VT restore */
     _sapp_drm_vt_restore();
