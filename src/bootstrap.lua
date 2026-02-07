@@ -673,4 +673,73 @@ function require(name)
   end
 end
 
+-- ============================================================
+-- spry.http — coroutine-friendly HTTP/HTTPS requests
+-- ============================================================
+-- These wrap the low-level spry.http._request() C function.
+-- Must be called from inside a coroutine (use resume() each frame).
+
+if spry.http then
+
+--- Perform a full HTTP/HTTPS request. Yields until complete.
+--- @param opts table|string  Either a URL string or an options table:
+---   { url=string, method=string, headers=table, body=string, timeout=number }
+--- @param body string|nil  Optional body (only when opts is a string)
+--- @return string|nil body, integer status, table headers, string|nil err
+function spry.http.request(opts, body)
+  if type(opts) == "string" then
+    opts = { url = opts, method = body and "POST" or "GET", body = body }
+  end
+  opts.method = opts.method or "GET"
+  local req = spry.http._request(opts)
+  while not req:done() do
+    coroutine.yield()
+  end
+  return req:result()
+end
+
+--- GET request. Yields until complete.
+--- @param url string
+--- @param headers table|nil  Optional headers { ["Key"] = "Value" }
+--- @return string|nil body, integer status, table headers, string|nil err
+function spry.http.get(url, headers)
+  return spry.http.request({ url = url, method = "GET", headers = headers })
+end
+
+--- POST request. Yields until complete.
+--- @param url string
+--- @param content_type string  e.g. "application/json"
+--- @param body string
+--- @param headers table|nil
+--- @return string|nil body, integer status, table headers, string|nil err
+function spry.http.post(url, content_type, body, headers)
+  headers = headers or {}
+  headers["Content-Type"] = headers["Content-Type"] or content_type
+  return spry.http.request({
+    url = url,
+    method = "POST",
+    headers = headers,
+    body = body,
+  })
+end
+
+--- PUT request. Yields until complete.
+function spry.http.put(url, content_type, body, headers)
+  headers = headers or {}
+  headers["Content-Type"] = headers["Content-Type"] or content_type
+  return spry.http.request({
+    url = url,
+    method = "PUT",
+    headers = headers,
+    body = body,
+  })
+end
+
+--- DELETE request. Yields until complete.
+function spry.http.delete(url, headers)
+  return spry.http.request({ url = url, method = "DELETE", headers = headers })
+end
+
+end -- if spry.http
+
 --)lua"--"

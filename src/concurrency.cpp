@@ -2,6 +2,7 @@
 #include "api.h"
 #include "deps/luaalloc.h"
 #include "hash_map.h"
+#include "http.h"
 #include "luax.h"
 #include "prelude.h"
 #include "profile.h"
@@ -38,6 +39,11 @@ static void lua_thread_proc(void *udata) {
   {
     PROFILE_BLOCK("open luasocket");
     open_luasocket(L);
+  }
+
+  {
+    PROFILE_BLOCK("open http");
+    open_http_api(L);
   }
 
   {
