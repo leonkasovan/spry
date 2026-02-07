@@ -11,6 +11,7 @@
 #include "deps/sokol_time.h"
 #include "draw.h"
 #include "font.h"
+#include "http.h"
 #include "luax.h"
 #include "microui.h"
 #include "os.h"
@@ -18,6 +19,12 @@
 #include "profile.h"
 #include "sync.h"
 #include "vfs.h"
+
+#if defined(IS_LINUX) || defined(__linux__)
+#include <GLES3/gl3.h>
+#elif defined(SOKOL_GLCORE33)
+#include <GL/gl.h>
+#endif
 
 extern "C" {
 #include <lua.h>
@@ -33,6 +40,19 @@ static void init() {
 
   {
     PROFILE_BLOCK("sokol");
+
+    // Diagnostic: print GL info and clear any pre-existing errors
+    const char* gl_version = (const char*)glGetString(GL_VERSION);
+    const char* gl_renderer = (const char*)glGetString(GL_RENDERER);
+    const char* gl_vendor = (const char*)glGetString(GL_VENDOR);
+    const char* gl_sl = (const char*)glGetString(GL_SHADING_LANGUAGE_VERSION);
+    printf("GL_VERSION: %s\n", gl_version ? gl_version : "(null)");
+    printf("GL_RENDERER: %s\n", gl_renderer ? gl_renderer : "(null)");
+    printf("GL_VENDOR: %s\n", gl_vendor ? gl_vendor : "(null)");
+    printf("GL_SHADING_LANGUAGE_VERSION: %s\n", gl_sl ? gl_sl : "(null)");
+    while (glGetError() != GL_NO_ERROR) {
+      // drain pre-existing GL error state
+    }
 
     sg_desc sg = {};
     sg.logger.func = slog_func;
@@ -333,6 +353,7 @@ static void actually_cleanup() {
     PROFILE_BLOCK("destroy assets");
 
     lua_channels_shutdown();
+    http_shutdown();
 
     if (g_app->default_font != nullptr) {
       g_app->default_font->trash();
@@ -408,6 +429,7 @@ static void setup_lua() {
   luaL_openlibs(L);
   open_spry_api(L);
   open_luasocket(L);
+  open_http_api(L);
   luax_run_bootstrap(L);
 
   // add error message handler. always at the bottom of stack.

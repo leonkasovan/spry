@@ -7624,6 +7624,11 @@ _SOKOL_PRIVATE void _sg_gl_cache_invalidate_pipeline(_sg_pipeline_t* pip) {
 
 _SOKOL_PRIVATE void _sg_gl_reset_state_cache(void) {
     if (_sg.gl.cur_context) {
+        #if defined(SOKOL_DEBUG)
+        while (glGetError() != GL_NO_ERROR) {
+            /* drain pre-existing GL error state */
+        }
+        #endif
         _SG_GL_CHECK_ERROR();
         glBindVertexArray(_sg.gl.cur_context->vao);
         _SG_GL_CHECK_ERROR();
@@ -7820,8 +7825,14 @@ _SOKOL_PRIVATE bool _sg_gl_supported_texture_format(sg_pixel_format fmt) {
 
 _SOKOL_PRIVATE sg_resource_state _sg_gl_create_image(_sg_image_t* img, const sg_image_desc* desc) {
     SOKOL_ASSERT(img && desc);
+    #if defined(SOKOL_DEBUG)
+    while (glGetError() != GL_NO_ERROR) {
+        /* drain pre-existing GL error state */
+    }
+    #endif
     _SG_GL_CHECK_ERROR();
     img->gl.injected = (0 != desc->gl_textures[0]);
+    const bool is_compressed = _sg_is_compressed_pixel_format(img->cmn.pixel_format);
 
     // check if texture format is support
     if (!_sg_gl_supported_texture_format(img->cmn.pixel_format)) {
@@ -7850,7 +7861,6 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_image(_sg_image_t* img, const sg_
         // create our own GL texture(s)
         img->gl.target = _sg_gl_texture_target(img->cmn.type);
         const GLenum gl_format = _sg_gl_teximage_format(img->cmn.pixel_format);
-        const bool is_compressed = _sg_is_compressed_pixel_format(img->cmn.pixel_format);
         for (int slot = 0; slot < img->cmn.num_slots; slot++) {
             glGenTextures(1, &img->gl.tex[slot]);
             SOKOL_ASSERT(img->gl.tex[slot]);
@@ -7898,6 +7908,29 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_image(_sg_image_t* img, const sg_
             _sg_gl_cache_restore_texture_sampler_binding(0);
         }
     }
+    #if defined(SOKOL_DEBUG)
+    {
+        const GLenum err = glGetError();
+        if (err != GL_NO_ERROR) {
+            fprintf(stderr,
+                "sokol_gfx: gl error 0x%04x in _sg_gl_create_image "
+                "(fmt=%d w=%d h=%d mips=%d target=0x%x rt=%d samples=%d compressed=%d)\n",
+                (int)err,
+                (int)img->cmn.pixel_format,
+                (int)img->cmn.width,
+                (int)img->cmn.height,
+                (int)img->cmn.num_mipmaps,
+                (int)img->gl.target,
+                (int)img->cmn.render_target,
+                (int)img->cmn.sample_count,
+                (int)is_compressed);
+            while (glGetError() != GL_NO_ERROR) {
+                /* drain additional errors */
+            }
+            SOKOL_ASSERT(false);
+        }
+    }
+    #endif
     _SG_GL_CHECK_ERROR();
     return SG_RESOURCESTATE_VALID;
 }
