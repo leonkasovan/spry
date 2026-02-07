@@ -89,6 +89,8 @@ elseif(WIN32)
 
 elseif(UNIX)
   message(STATUS "Detected platform: Unix")
+  option(USE_WAYLAND "Build with Wayland instead of X11" OFF)
+  option(USE_DRM "Build with DRM/KMS (no display server, direct rendering)" OFF)
   set(LUASOCKET
     ${LUASOCKET}
     src/deps/luasocket/serial.c
@@ -98,7 +100,21 @@ elseif(UNIX)
     src/deps/luasocket/usocket.c
   )
   add_compile_definitions(LUA_USE_LINUX)
-  set(LFLAGS -lX11 -lXi -lXcursor -lasound -lGL -ldl -lpthread -lm)
+  if(USE_WAYLAND)
+    message(STATUS "Display server: Wayland")
+    add_compile_definitions(SOKOL_WAYLAND)
+    add_compile_definitions(SOKOL_USE_GLES3)
+    set(LFLAGS -lwayland-client -lwayland-cursor -lwayland-egl -lxkbcommon -lEGL -lGLESv2 -lasound -ldl -lpthread -lm)
+  elseif(USE_DRM)
+    message(STATUS "Display server: DRM/KMS")
+    add_compile_definitions(SOKOL_DRM)
+    add_compile_definitions(SOKOL_GLES3)
+    include_directories(/usr/include/libdrm)
+    set(LFLAGS -ldrm -lgbm -lEGL -lGLESv2 -linput -ludev -lxkbcommon -lasound -ldl -lpthread -lm)
+  else()
+    message(STATUS "Display server: X11")
+    set(LFLAGS -lX11 -lXi -lXcursor -lasound -lGL -ldl -lpthread -lm)
+  endif()
 endif()
 
 file(GLOB SOURCES CONFIGURE_DEPENDS src/*.cpp src/*.h)
