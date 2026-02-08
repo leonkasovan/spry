@@ -69,10 +69,10 @@ Other compilers might work, but they haven't been tested.
 In the command line:
 
 ```sh
-mkdir build
-cd build
-cmake .. # This command probably looks different
-cmake --build .
+cmake -B build (default, use X11 backend)
+cmake -B build -DUSE_DRM=ON (use DRM backend)
+cmake -B build -DUSE_WAYLAND=ON (use Wayland backend)
+cmake --build build -- -j8
 ```
 
 The first `cmake` command might need extra flags depending on the environment.

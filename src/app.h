@@ -5,6 +5,7 @@
 #include "deps/sokol_gfx.h"
 #include "deps/sokol_gl.h"
 #include "font.h"
+#include "gamepad.h"
 #include "slice.h"
 #include "sound.h"
 #include <atomic>
@@ -53,6 +54,8 @@ struct App {
   float mouse_y;
   float scroll_x;
   float scroll_y;
+
+  GamepadState gamepad;
 
   FontFamily *default_font;
 

@@ -5,6 +5,7 @@
 #include "atlas.h"
 #include "concurrency.h"
 #include "deps/microui.h"
+#include "gamepad.h"
 #include "deps/sokol_app.h"
 #include "deps/sokol_gfx.h"
 #include "deps/sokol_gl.h"
@@ -2297,6 +2298,208 @@ static int spry_scroll_wheel(lua_State *L) {
   return 2;
 }
 
+// ---- Joystick / Gamepad ----
+
+static GamepadButton gamepad_button_lookup(String str) {
+  switch (fnv1a(str)) {
+  case "a"_hash: return GAMEPAD_BUTTON_A;
+  case "b"_hash: return GAMEPAD_BUTTON_B;
+  case "x"_hash: return GAMEPAD_BUTTON_X;
+  case "y"_hash: return GAMEPAD_BUTTON_Y;
+  case "back"_hash: return GAMEPAD_BUTTON_BACK;
+  case "guide"_hash: return GAMEPAD_BUTTON_GUIDE;
+  case "start"_hash: return GAMEPAD_BUTTON_START;
+  case "leftstick"_hash: return GAMEPAD_BUTTON_LEFTSTICK;
+  case "rightstick"_hash: return GAMEPAD_BUTTON_RIGHTSTICK;
+  case "leftshoulder"_hash: return GAMEPAD_BUTTON_LEFTSHOULDER;
+  case "rightshoulder"_hash: return GAMEPAD_BUTTON_RIGHTSHOULDER;
+  case "dpup"_hash: return GAMEPAD_BUTTON_DPUP;
+  case "dpdown"_hash: return GAMEPAD_BUTTON_DPDOWN;
+  case "dpleft"_hash: return GAMEPAD_BUTTON_DPLEFT;
+  case "dpright"_hash: return GAMEPAD_BUTTON_DPRIGHT;
+  default: return GAMEPAD_BUTTON_MAX;
+  }
+}
+
+static GamepadAxis gamepad_axis_lookup(String str) {
+  switch (fnv1a(str)) {
+  case "leftx"_hash: return GAMEPAD_AXIS_LEFTX;
+  case "lefty"_hash: return GAMEPAD_AXIS_LEFTY;
+  case "rightx"_hash: return GAMEPAD_AXIS_RIGHTX;
+  case "righty"_hash: return GAMEPAD_AXIS_RIGHTY;
+  case "lefttrigger"_hash: return GAMEPAD_AXIS_LEFT_TRIGGER;
+  case "righttrigger"_hash: return GAMEPAD_AXIS_RIGHT_TRIGGER;
+  default: return GAMEPAD_AXIS_MAX;
+  }
+}
+
+static int spry_joystick_count(lua_State *L) {
+  lua_pushinteger(L, gamepad_count(&g_app->gamepad));
+  return 1;
+}
+
+static int spry_joystick_name(lua_State *L) {
+  i32 idx = (i32)luaL_checkinteger(L, 1) - 1;
+  if (idx >= 0 && idx < MAX_JOYSTICKS &&
+      g_app->gamepad.joysticks[idx].connected) {
+    lua_pushstring(L, g_app->gamepad.joysticks[idx].name);
+  } else {
+    lua_pushnil(L);
+  }
+  return 1;
+}
+
+static int spry_joystick_guid(lua_State *L) {
+  i32 idx = (i32)luaL_checkinteger(L, 1) - 1;
+  if (idx >= 0 && idx < MAX_JOYSTICKS &&
+      g_app->gamepad.joysticks[idx].connected) {
+    lua_pushstring(L, g_app->gamepad.joysticks[idx].guid);
+  } else {
+    lua_pushnil(L);
+  }
+  return 1;
+}
+
+static int spry_joystick_down(lua_State *L) {
+  i32 idx = (i32)luaL_checkinteger(L, 1) - 1;
+  String str = luax_check_string(L, 2);
+  GamepadButton btn = gamepad_button_lookup(str);
+  bool down = false;
+  if (idx >= 0 && idx < MAX_JOYSTICKS && btn < GAMEPAD_BUTTON_MAX) {
+    down = g_app->gamepad.joysticks[idx].buttons[btn];
+  }
+  lua_pushboolean(L, down);
+  return 1;
+}
+
+static int spry_joystick_press(lua_State *L) {
+  i32 idx = (i32)luaL_checkinteger(L, 1) - 1;
+  String str = luax_check_string(L, 2);
+  GamepadButton btn = gamepad_button_lookup(str);
+  bool press = false;
+  if (idx >= 0 && idx < MAX_JOYSTICKS && btn < GAMEPAD_BUTTON_MAX) {
+    Joystick *j = &g_app->gamepad.joysticks[idx];
+    press = j->buttons[btn] && !j->prev_buttons[btn];
+  }
+  lua_pushboolean(L, press);
+  return 1;
+}
+
+static int spry_joystick_release(lua_State *L) {
+  i32 idx = (i32)luaL_checkinteger(L, 1) - 1;
+  String str = luax_check_string(L, 2);
+  GamepadButton btn = gamepad_button_lookup(str);
+  bool release = false;
+  if (idx >= 0 && idx < MAX_JOYSTICKS && btn < GAMEPAD_BUTTON_MAX) {
+    Joystick *j = &g_app->gamepad.joysticks[idx];
+    release = !j->buttons[btn] && j->prev_buttons[btn];
+  }
+  lua_pushboolean(L, release);
+  return 1;
+}
+
+static int spry_joystick_axis(lua_State *L) {
+  i32 idx = (i32)luaL_checkinteger(L, 1) - 1;
+  String str = luax_check_string(L, 2);
+  GamepadAxis axis = gamepad_axis_lookup(str);
+  float val = 0.0f;
+  if (idx >= 0 && idx < MAX_JOYSTICKS && axis < GAMEPAD_AXIS_MAX) {
+    val = g_app->gamepad.joysticks[idx].axes[axis];
+  }
+  lua_pushnumber(L, val);
+  return 1;
+}
+
+static int spry_joystick_button(lua_State *L) {
+  i32 idx = (i32)luaL_checkinteger(L, 1) - 1;
+  i32 btn = (i32)luaL_checkinteger(L, 2);
+  bool down = false;
+  if (idx >= 0 && idx < MAX_JOYSTICKS && btn >= 0 && btn < MAX_RAW_BUTTONS) {
+    down = g_app->gamepad.joysticks[idx].raw_buttons[btn];
+  }
+  lua_pushboolean(L, down);
+  return 1;
+}
+
+static int spry_joystick_raw_axis(lua_State *L) {
+  i32 idx = (i32)luaL_checkinteger(L, 1) - 1;
+  i32 a = (i32)luaL_checkinteger(L, 2);
+  float val = 0.0f;
+  if (idx >= 0 && idx < MAX_JOYSTICKS && a >= 0 && a < MAX_RAW_AXES) {
+    val = g_app->gamepad.joysticks[idx].raw_axes[a];
+  }
+  lua_pushnumber(L, val);
+  return 1;
+}
+
+static int spry_joystick_axis_count(lua_State *L) {
+  i32 idx = (i32)luaL_checkinteger(L, 1) - 1;
+  i32 count = 0;
+  if (idx >= 0 && idx < MAX_JOYSTICKS) {
+    count = g_app->gamepad.joysticks[idx].raw_axis_count;
+  }
+  lua_pushinteger(L, count);
+  return 1;
+}
+
+static int spry_joystick_button_count(lua_State *L) {
+  i32 idx = (i32)luaL_checkinteger(L, 1) - 1;
+  i32 count = 0;
+  if (idx >= 0 && idx < MAX_JOYSTICKS) {
+    count = g_app->gamepad.joysticks[idx].raw_button_count;
+  }
+  lua_pushinteger(L, count);
+  return 1;
+}
+
+static int spry_joystick_connected(lua_State *L) {
+  i32 idx = (i32)luaL_checkinteger(L, 1) - 1;
+  bool ok = idx >= 0 && idx < MAX_JOYSTICKS &&
+            g_app->gamepad.joysticks[idx].connected;
+  lua_pushboolean(L, ok);
+  return 1;
+}
+
+static int spry_joystick_is_gamepad(lua_State *L) {
+  i32 idx = (i32)luaL_checkinteger(L, 1) - 1;
+  bool gp = false;
+  if (idx >= 0 && idx < MAX_JOYSTICKS) {
+    gp = g_app->gamepad.joysticks[idx].is_gamepad;
+  }
+  lua_pushboolean(L, gp);
+  return 1;
+}
+
+static int spry_joystick_vibration(lua_State *L) {
+  i32 idx = (i32)luaL_checkinteger(L, 1) - 1;
+  float left = (float)luaL_checknumber(L, 2);
+  float right = (float)luaL_checknumber(L, 3);
+  float dur = (float)luaL_optnumber(L, 4, 0);
+  gamepad_set_vibration(&g_app->gamepad, idx, left, right, dur);
+  return 0;
+}
+
+static int spry_joystick_deadzone(lua_State *L) {
+  if (lua_gettop(L) >= 1) {
+    g_app->gamepad.deadzone = (float)luaL_checknumber(L, 1);
+  }
+  lua_pushnumber(L, g_app->gamepad.deadzone);
+  return 1;
+}
+
+static int spry_joystick_add_mappings(lua_State *L) {
+  String filepath = luax_check_string(L, 1);
+  String contents = {};
+  bool ok = vfs_read_entire_file(&contents, filepath);
+  if (!ok) {
+    return luaL_error(L, "failed to read mapping file: %s", filepath.data);
+  }
+  defer(mem_free(contents.data));
+  i32 added = gamepad_add_mappings_from_string(&g_app->gamepad, contents);
+  lua_pushinteger(L, added);
+  return 1;
+}
+
 static int spry_scissor_rect(lua_State *L) {
   lua_Number x = luaL_optnumber(L, 1, 0);
   lua_Number y = luaL_optnumber(L, 2, 0);
@@ -2720,6 +2923,24 @@ static int open_spry(lua_State *L) {
       {"mouse_delta", spry_mouse_delta},
       {"show_mouse", spry_show_mouse},
       {"scroll_wheel", spry_scroll_wheel},
+
+      // joystick / gamepad
+      {"joystick_count", spry_joystick_count},
+      {"joystick_name", spry_joystick_name},
+      {"joystick_guid", spry_joystick_guid},
+      {"joystick_down", spry_joystick_down},
+      {"joystick_press", spry_joystick_press},
+      {"joystick_release", spry_joystick_release},
+      {"joystick_axis", spry_joystick_axis},
+      {"joystick_button", spry_joystick_button},
+      {"joystick_raw_axis", spry_joystick_raw_axis},
+      {"joystick_axis_count", spry_joystick_axis_count},
+      {"joystick_button_count", spry_joystick_button_count},
+      {"joystick_connected", spry_joystick_connected},
+      {"joystick_is_gamepad", spry_joystick_is_gamepad},
+      {"joystick_vibration", spry_joystick_vibration},
+      {"joystick_deadzone", spry_joystick_deadzone},
+      {"joystick_add_mappings", spry_joystick_add_mappings},
 
       // draw
       {"scissor_rect", spry_scissor_rect},

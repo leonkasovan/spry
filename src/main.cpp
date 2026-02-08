@@ -4,6 +4,7 @@
 #include "assets.h"
 #include "concurrency.h"
 #include "deps/sokol_app.h"
+#include "gamepad.h"
 #include "deps/sokol_gfx.h"
 #include "deps/sokol_gl.h"
 #include "deps/sokol_glue.h"
@@ -88,6 +89,7 @@ static void init() {
   }
 
   microui_init();
+  gamepad_init(&g_app->gamepad);
 
   renderer_reset();
 
@@ -294,6 +296,8 @@ static void frame() {
 #endif
   }
 
+  gamepad_update(&g_app->gamepad);
+
   g_app->gpu_mtx.unlock();
   render();
   assets_perform_hot_reload_changes();
@@ -306,6 +310,7 @@ static void frame() {
   g_app->prev_mouse_y = g_app->mouse_y;
   g_app->scroll_x = 0;
   g_app->scroll_y = 0;
+  gamepad_end_frame(&g_app->gamepad);
 
   Array<Sound *> &sounds = g_app->garbage_sounds;
   for (u64 i = 0; i < sounds.len;) {
@@ -342,6 +347,7 @@ static void actually_cleanup() {
   }
 
   microui_trash();
+  gamepad_shutdown(&g_app->gamepad);
 
   {
     PROFILE_BLOCK("lua close");

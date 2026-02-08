@@ -69,6 +69,7 @@ set(LUASOCKET
 )
 
 message(STATUS "Platform flags: EMSCRIPTEN=${EMSCRIPTEN}, WIN32=${WIN32}, UNIX=${UNIX}, MINGW=${MINGW}, MSYS=${MSYS}")
+add_compile_definitions(NDEBUG)
 
 if(EMSCRIPTEN)
   message(STATUS "Detected platform: Emscripten")
@@ -81,13 +82,13 @@ elseif(MINGW)
   message(STATUS "Detected platform: MinGW")
   set(LUASOCKET ${LUASOCKET} src/deps/luasocket/wsocket.c)
   add_compile_definitions(LUA_USE_LONGJMP)
-  set(LFLAGS -lws2_32)
+  set(LFLAGS -lws2_32 -lxinput)
 
 elseif(WIN32)
   message(STATUS "Detected platform: Windows")
   set(LUASOCKET ${LUASOCKET} src/deps/luasocket/wsocket.c)
   add_compile_definitions(LUA_USE_LONGJMP)
-  set(LFLAGS ws2_32)
+  set(LFLAGS ws2_32 xinput)
 
 elseif(UNIX)
   message(STATUS "Detected platform: Unix")
