@@ -31,6 +31,12 @@ extern "C" {
 // Platform sockets
 // ============================================================
 #ifdef IS_WIN32
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef _WINSOCKAPI_
+#define _WINSOCKAPI_
+#endif
 #include <winsock2.h>
 #include <ws2tcpip.h>
 #pragma comment(lib, "ws2_32.lib")
@@ -38,6 +44,32 @@ typedef SOCKET socket_t;
 #define INVALID_SOCK INVALID_SOCKET
 #define close_socket closesocket
 static int socket_error() { return WSAGetLastError(); }
+
+static std::atomic<int> g_winsock_state{0};
+
+static bool _winsock_init(char *err, size_t errlen) {
+  int expected = 0;
+  if (g_winsock_state.compare_exchange_strong(expected, 1)) {
+    WSADATA wsa_data;
+    int rc = WSAStartup(MAKEWORD(2, 2), &wsa_data);
+    if (rc != 0) {
+      g_winsock_state.store(-1);
+      if (err && errlen > 0) {
+        snprintf(err, errlen, "WSAStartup failed: %d", rc);
+      }
+      return false;
+    }
+    g_winsock_state.store(2);
+    return true;
+  }
+
+  int state = g_winsock_state.load();
+  if (state == 2) return true;
+  if (err && errlen > 0) {
+    snprintf(err, errlen, "WSAStartup failed (previous error)");
+  }
+  return false;
+}
 #else
 #include <arpa/inet.h>
 #include <errno.h>
@@ -262,10 +294,21 @@ struct Connection {
   bool is_tls;
 };
 
-static bool _conn_connect(Connection *conn, ParsedUrl *url) {
+static bool _conn_connect(Connection *conn, ParsedUrl *url, char *err,
+                           size_t errlen) {
   memset(conn, 0, sizeof(*conn));
   conn->sock = INVALID_SOCK;
   conn->is_tls = url->https;
+
+  if (err && errlen > 0) {
+    err[0] = 0;
+  }
+
+#ifdef IS_WIN32
+  if (!_winsock_init(err, errlen)) {
+    return false;
+  }
+#endif
 
   struct addrinfo hints = {};
   hints.ai_family = AF_UNSPEC;
@@ -273,24 +316,49 @@ static bool _conn_connect(Connection *conn, ParsedUrl *url) {
 
   struct addrinfo *result = nullptr;
   int rc = getaddrinfo(url->host, url->port, &hints, &result);
-  if (rc != 0 || !result) return false;
+  if (rc != 0 || !result) {
+    if (err && errlen > 0) {
+#ifdef IS_WIN32
+      snprintf(err, errlen, "getaddrinfo(%s:%s) failed: %s", url->host,
+               url->port, gai_strerrorA(rc));
+#else
+      snprintf(err, errlen, "getaddrinfo(%s:%s) failed: %s", url->host,
+               url->port, gai_strerror(rc));
+#endif
+    }
+    return false;
+  }
 
   socket_t sock = INVALID_SOCK;
+  int last_err = 0;
   for (struct addrinfo *rp = result; rp; rp = rp->ai_next) {
     sock = socket(rp->ai_family, rp->ai_socktype, rp->ai_protocol);
-    if (sock == INVALID_SOCK) continue;
+    if (sock == INVALID_SOCK) {
+      last_err = socket_error();
+      continue;
+    }
     if (connect(sock, rp->ai_addr, (int)rp->ai_addrlen) == 0) break;
+    last_err = socket_error();
     close_socket(sock);
     sock = INVALID_SOCK;
   }
   freeaddrinfo(result);
 
-  if (sock == INVALID_SOCK) return false;
+  if (sock == INVALID_SOCK) {
+    if (err && errlen > 0) {
+      snprintf(err, errlen, "connect(%s:%s) failed: %d", url->host, url->port,
+               last_err);
+    }
+    return false;
+  }
   conn->sock = sock;
 
 #if !defined(IS_HTML5)
   if (url->https) {
     if (!_tls_load()) {
+      if (err && errlen > 0) {
+        snprintf(err, errlen, "TLS not available (libssl not found)");
+      }
       close_socket(sock);
       conn->sock = INVALID_SOCK;
       return false;
@@ -298,6 +366,9 @@ static bool _conn_connect(Connection *conn, ParsedUrl *url) {
 
     conn->ssl_ctx = _tls.SSL_CTX_new(_tls.TLS_client_method());
     if (!conn->ssl_ctx) {
+      if (err && errlen > 0) {
+        snprintf(err, errlen, "TLS context creation failed");
+      }
       close_socket(sock);
       conn->sock = INVALID_SOCK;
       return false;
@@ -305,6 +376,9 @@ static bool _conn_connect(Connection *conn, ParsedUrl *url) {
 
     conn->ssl = _tls.SSL_new(conn->ssl_ctx);
     if (!conn->ssl) {
+      if (err && errlen > 0) {
+        snprintf(err, errlen, "TLS session creation failed");
+      }
       _tls.SSL_CTX_free(conn->ssl_ctx);
       close_socket(sock);
       conn->sock = INVALID_SOCK;
@@ -319,7 +393,12 @@ static bool _conn_connect(Connection *conn, ParsedUrl *url) {
                      TLSEXT_NAMETYPE_host_name, (void *)url->host);
     }
 
-    if (_tls.SSL_connect(conn->ssl) <= 0) {
+    int ssl_ret = _tls.SSL_connect(conn->ssl);
+    if (ssl_ret <= 0) {
+      if (err && errlen > 0 && _tls.SSL_get_error) {
+        int ssl_err = _tls.SSL_get_error(conn->ssl, ssl_ret);
+        snprintf(err, errlen, "TLS handshake failed: %d", ssl_err);
+      }
       _tls.SSL_free(conn->ssl);
       _tls.SSL_CTX_free(conn->ssl_ctx);
       close_socket(sock);
@@ -520,9 +599,11 @@ static void _http_worker(void *udata) {
   }
 
   Connection conn;
-  if (!_conn_connect(&conn, &url)) {
-    snprintf(req->error, sizeof(req->error), "connection to %s:%s failed",
-             url.host, url.port);
+  if (!_conn_connect(&conn, &url, req->error, sizeof(req->error))) {
+    if (req->error[0] == 0) {
+      snprintf(req->error, sizeof(req->error), "connection to %s:%s failed",
+               url.host, url.port);
+    }
     req->state.store(2, std::memory_order_release);
     return;
   }
@@ -971,4 +1052,12 @@ void open_http_api(lua_State *L) {
   lua_pop(L, 2); // pop spry table and http table
 }
 
-void http_shutdown(void) { _tls_unload(); }
+void http_shutdown(void) {
+  _tls_unload();
+#ifdef IS_WIN32
+  if (g_winsock_state.load() == 2) {
+    WSACleanup();
+    g_winsock_state.store(0);
+  }
+#endif
+}
