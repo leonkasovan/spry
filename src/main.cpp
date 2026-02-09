@@ -42,19 +42,6 @@ static void init() {
   {
     PROFILE_BLOCK("sokol");
 
-    // Diagnostic: print GL info and clear any pre-existing errors
-    const char* gl_version = (const char*)glGetString(GL_VERSION);
-    const char* gl_renderer = (const char*)glGetString(GL_RENDERER);
-    const char* gl_vendor = (const char*)glGetString(GL_VENDOR);
-    const char* gl_sl = (const char*)glGetString(GL_SHADING_LANGUAGE_VERSION);
-    printf("GL_VERSION: %s\n", gl_version ? gl_version : "(null)");
-    printf("GL_RENDERER: %s\n", gl_renderer ? gl_renderer : "(null)");
-    printf("GL_VENDOR: %s\n", gl_vendor ? gl_vendor : "(null)");
-    printf("GL_SHADING_LANGUAGE_VERSION: %s\n", gl_sl ? gl_sl : "(null)");
-    while (glGetError() != GL_NO_ERROR) {
-      // drain pre-existing GL error state
-    }
-
     sg_desc sg = {};
     sg.logger.func = slog_func;
     sg.context = sapp_sgcontext();

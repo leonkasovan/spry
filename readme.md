@@ -68,11 +68,22 @@ Other compilers might work, but they haven't been tested.
 
 In the command line:
 
+Build for Linux 
 ```sh
 cmake -B build (default, use X11 backend)
+OR
 cmake -B build -DUSE_DRM=ON (use DRM backend)
+OR
 cmake -B build -DUSE_WAYLAND=ON (use Wayland backend)
 cmake --build build -- -j8
+```
+
+Build for Windows (using VS 2022)
+```sh
+cmake -B build
+cmake --build build
+OR
+cmake --build build --config Release
 ```
 
 The first `cmake` command might need extra flags depending on the environment.
