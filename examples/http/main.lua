@@ -7,7 +7,8 @@
 --   3. POST with JSON body
 --   4. PUT request
 --   5. DELETE request
---   6. Non-blocking polling (without coroutine helper)
+--   6. Non-blocking polling (without coroutine helper) + progress
+--   6a. Download with progress bar (microui panel)
 --   7. Multiple concurrent requests
 --   8. Error handling
 --   9. Checking TLS (HTTPS) availability
@@ -24,6 +25,23 @@ local log_scroll = 0
 local demo_co         -- the main demo coroutine
 local concurrent_co   -- concurrent requests demo
 local polling_request -- for the non-blocking polling demo
+local polling_progress_accum = 0
+local polling_last_downloaded = 0
+local polling_last_uploaded = 0
+local polling_last_total = -1
+
+-- Progress demo (microui panel) state
+local mu
+local dl_url_ref         -- mu.ref for the URL text input
+local dl_out_ref         -- mu.ref for output path
+local dl_override_ref    -- mu.ref for override checkbox
+local dl_request = nil   -- active HttpRequest handle
+local dl_downloaded = 0
+local dl_total = -1
+local dl_status_text = "Ready"
+local dl_body = nil
+local dl_output_path = ""
+local dl_show_panel = false
 
 -- ============================================================
 -- Helpers
@@ -129,11 +147,15 @@ end
 
 function spry.start()
   font = spry.default_font()
+  mu = spry.microui
+  dl_url_ref = mu.ref "https://archive.org/download/mugen-1.1b1/mugen-1.1b1.zip"
+  dl_out_ref = mu.ref "mugen-1.1b1.zip"
+  dl_override_ref = mu.ref(false)
 
   -- 9. TLS availability check (runs immediately, no coroutine needed)
   separator("TLS Check")
   if spry.http.tls_available() then
-    log("TLS (HTTPS) is available — OpenSSL loaded at runtime.")
+    log("TLS (HTTPS) is available (SChannel on Windows, OpenSSL on Linux/macOS).")
   else
     log("TLS (HTTPS) NOT available — only plain HTTP will work.")
   end
@@ -161,6 +183,29 @@ function spry.frame(dt)
         log("[poll] Done! status=%d  body=%d bytes", status, #body)
       end
       polling_request = nil -- consumed
+      polling_progress_accum = 0
+      polling_last_downloaded = 0
+      polling_last_uploaded = 0
+      polling_last_total = -1
+    else
+      polling_progress_accum = polling_progress_accum + dt
+      if polling_progress_accum >= 0.25 then
+        local p = polling_request:progress()
+        if p.downloaded ~= polling_last_downloaded or
+           p.uploaded ~= polling_last_uploaded or
+           p.total ~= polling_last_total then
+          if p.total and p.total > 0 then
+            local percent = (p.downloaded / p.total) * 100
+            log("[poll] Progress: %.1f%% (%d / %d bytes)", percent, p.downloaded, p.total)
+          else
+            log("[poll] Progress: %d bytes", p.downloaded)
+          end
+          polling_last_downloaded = p.downloaded
+          polling_last_uploaded = p.uploaded
+          polling_last_total = p.total
+        end
+        polling_progress_accum = 0
+      end
     end
   end
 
@@ -172,7 +217,7 @@ function spry.frame(dt)
   font:draw("HTTP Examples  (scroll: mouse wheel)", x, y, size)
   y = y + size + 6
 
-  font:draw("Press [1] GET  [2] POST  [3] Concurrent  [4] Poll  [5] Error", x, y, size)
+  font:draw("Press [1] GET  [2] POST  [3] Concurrent  [4] Poll  [5] Error  [6] Download", x, y, size)
   y = y + size + 10
 
   -- scrollable log
@@ -205,6 +250,14 @@ function spry.frame(dt)
   end
   if spry.key_press "5" then
     demo_co = coroutine.create(demo_error_handling)
+  end
+  if spry.key_press "6" then
+    dl_show_panel = not dl_show_panel
+  end
+
+  -- 6a. Download with progress panel (microui)
+  if dl_show_panel then
+    download_panel()
   end
 
   if spry.key_down "esc" then spry.quit() end
@@ -430,5 +483,143 @@ function demo_json()
   if data then
     log("  Parsed JSON: slideshow title = %s", data.slideshow.title or "?")
     log("  Number of slides: %d", #data.slideshow.slides)
+  end
+end
+
+-- ============================================================
+-- 6a. Download with Progress (microui panel)
+-- ============================================================
+
+function download_panel()
+  -- Update active download progress
+  if dl_request then
+    local p = dl_request:progress()
+    dl_downloaded = p.downloaded
+    dl_total = p.total
+
+    if dl_request:done() then
+      local body, status, headers, err = dl_request:result()
+      if err then
+        dl_status_text = ("Error: %s"):format(err)
+        log("[download] Error: %s", err)
+      else
+        if dl_output_path ~= "" then
+          dl_status_text = ("Done! status=%d  saved to %s (%d bytes)"):format(
+              status, dl_output_path, dl_downloaded)
+          dl_body = nil
+          log("[download] Complete: status=%d  saved to %s (%d bytes)",
+              status, dl_output_path, dl_downloaded)
+        else
+          dl_status_text = ("Done! status=%d  size=%d bytes"):format(status, #body)
+          dl_body = body
+          log("[download] Complete: status=%d  body=%d bytes", status, #body)
+        end
+      end
+      dl_request = nil
+    else
+      if dl_total > 0 then
+        local pct = (dl_downloaded / dl_total) * 100
+        dl_status_text = ("Downloading... %.1f%% (%d / %d)"):format(pct, dl_downloaded, dl_total)
+      else
+        dl_status_text = ("Downloading... %d bytes"):format(dl_downloaded)
+      end
+    end
+  end
+
+  -- Draw the microui window
+  if mu.begin_window("Download with Progress", mu.rect(200, 80, 520, 230)) then
+    -- URL input row
+    mu.layout_row({50, -70, -1}, 0)
+    mu.label("URL:")
+    mu.textbox(dl_url_ref)
+    local is_busy = dl_request ~= nil
+    if is_busy then
+      if mu.button("Cancel") then
+        -- Can't truly cancel, but forget about it
+        dl_request = nil
+        dl_downloaded = 0
+        dl_total = -1
+        dl_status_text = "Cancelled"
+        log("[download] Cancelled by user")
+      end
+    else
+      if mu.button("Download") then
+        local url = dl_url_ref:get()
+        local output = dl_out_ref:get()
+        if #url > 0 then
+          dl_downloaded = 0
+          dl_total = -1
+          dl_body = nil
+          dl_status_text = "Starting..."
+          dl_output_path = output or ""
+          if dl_output_path ~= "" then
+            log("[download] Starting: %s -> %s", url, dl_output_path)
+          else
+            log("[download] Starting: %s", url)
+          end
+          dl_request = spry.http._request({
+            url = url,
+            method = "GET",
+            timeout = 120,
+            output = (dl_output_path ~= "" and dl_output_path or nil),
+            override = dl_override_ref:get(),
+          })
+        end
+      end
+    end
+
+    -- Output path row
+    mu.layout_row({50, -120, -1}, 0)
+    mu.label("Save:")
+    mu.textbox(dl_out_ref)
+    mu.checkbox("Override", dl_override_ref)
+
+    -- Status text
+    mu.layout_row({-1}, 0)
+    mu.label(dl_status_text)
+
+    -- Progress bar
+    mu.layout_row({-1}, 20)
+    local r = mu.layout_next()
+    -- Background
+    mu.draw_rect(r, { r = 40, g = 40, b = 50, a = 255 })
+    -- Fill
+    local fraction = 0
+    if dl_total > 0 then
+      fraction = math.min(dl_downloaded / dl_total, 1.0)
+    elseif dl_request and dl_downloaded > 0 then
+      -- Indeterminate: show a pulsing bar based on time
+      fraction = (math.sin(os.clock() * 3) + 1) * 0.5
+    end
+    if fraction > 0 then
+      local fill = {
+        x = r.x,
+        y = r.y,
+        w = math.floor(r.w * fraction),
+        h = r.h,
+      }
+      mu.draw_rect(fill, { r = 80, g = 180, b = 80, a = 255 })
+    end
+    -- Outline
+    mu.draw_box(r, { r = 100, g = 100, b = 110, a = 255 })
+    -- Percentage text centered on bar
+    local pct_text
+    if dl_total > 0 then
+      pct_text = ("%.1f%%"):format(fraction * 100)
+    elseif dl_request then
+      pct_text = ("%d bytes"):format(dl_downloaded)
+    else
+      pct_text = ""
+    end
+    mu.draw_control_text(pct_text, r, mu.COLOR_TEXT, mu.OPT_ALIGNCENTER)
+
+    -- Body preview (if finished)
+    if dl_body and #dl_body > 0 and not dl_request then
+      mu.layout_row({-1}, 0)
+      local preview = dl_body:sub(1, 120):gsub("[%c]", " ")
+      mu.label(("Preview: %s%s"):format(preview, #dl_body > 120 and "..." or ""))
+    end
+
+    mu.end_window()
   end
 end

@@ -32,6 +32,7 @@ Perform a full HTTP or HTTPS request. Yields until the response is received.
 | `headers` | `table`  | `nil`    | Key-value table of request headers, e.g. `{ ["Authorization"] = "Bearer ..." }`. |
 | `body`    | `string` | `nil`    | Request body payload. |
 | `timeout` | `number` | `30`     | Timeout in seconds. |
+| `output`  | `string` | `nil`    | Optional file path. When set, the response body is streamed to disk and `body` is `nil` in results. If the file already exists and `override` is not set, the download resumes from where it left off (using HTTP `Range` header). |\n| `override` | `boolean` | `false` | When `true`, overwrite the output file from the beginning. When `false` (default), resume an interrupted download if the file already exists. |
 
 **Returns**
 
@@ -132,6 +133,7 @@ Starts an HTTP request on a background thread and returns immediately with a req
 |--------------|------------------|-------------|
 | `req:done()` | `boolean`        | `true` when the request has finished (success or error). |
 | `req:result()`| `body, status, headers, err` | Same 4-tuple as `request`. Only valid after `done()` returns `true`. |
+| `req:progress()` | `table` | Progress table: `{ uploaded, downloaded, total }`. `total` is `-1` when unknown (e.g., chunked). |
 
 The userdata is garbage-collected; the finalizer joins the worker thread and frees all memory.
 
@@ -218,6 +220,30 @@ function spry.frame(dt)
     local body, status, headers, err = req:result()
     print(status, body)
     req = nil
+  end
+end
+```
+
+### Progress tracking
+
+```lua
+local req = spry.http._request({ url = "https://httpbin.org/stream-bytes/65536" })
+
+function spry.frame(dt)
+  if not req then return end
+
+  if req:done() then
+    local body, status, headers, err = req:result()
+    print("done", status, err or "ok")
+    req = nil
+    return
+  end
+
+  local p = req:progress()
+  if p.total and p.total > 0 then
+    print(string.format("%.1f%% (%d/%d bytes)", (p.downloaded / p.total) * 100, p.downloaded, p.total))
+  else
+    print(string.format("%d bytes downloaded", p.downloaded))
   end
 end
 ```
