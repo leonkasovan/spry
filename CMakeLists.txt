@@ -70,6 +70,7 @@ set(LUASOCKET
 
 message(STATUS "Platform flags: EMSCRIPTEN=${EMSCRIPTEN}, WIN32=${WIN32}, UNIX=${UNIX}, MINGW=${MINGW}, MSYS=${MSYS}")
 option(USE_NETWORK "Build with HTTP module and luasocket" ON)
+option(USE_NUKLEAR "Build with Nuklear UI module" ON)
 add_compile_definitions(NDEBUG)
 
 if(EMSCRIPTEN)
@@ -131,6 +132,11 @@ if(NOT USE_NETWORK)
   message(STATUS "Network disabled: skipping HTTP module and luasocket")
   set(LUASOCKET)
   add_compile_definitions(NO_NETWORK)
+endif()
+
+if(NOT USE_NUKLEAR)
+  message(STATUS "Nuklear disabled: skipping Nuklear UI module")
+  add_compile_definitions(NO_NUKLEAR)
 endif()
 
 file(GLOB SOURCES CONFIGURE_DEPENDS src/*.cpp src/*.h)

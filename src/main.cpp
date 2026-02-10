@@ -15,6 +15,9 @@
 #include "http.h"
 #include "luax.h"
 #include "microui.h"
+#ifndef NO_NUKLEAR
+#include "nk_spry.h"
+#endif
 #include "os.h"
 #include "prelude.h"
 #include "profile.h"
@@ -76,6 +79,9 @@ static void init() {
   }
 
   microui_init();
+#ifndef NO_NUKLEAR
+  nuklear_init();
+#endif
   gamepad_init(&g_app->gamepad);
 
   renderer_reset();
@@ -114,6 +120,9 @@ static void init() {
 
 static void event(const sapp_event *e) {
   microui_sokol_event(e);
+#ifndef NO_NUKLEAR
+  nuklear_sokol_event(e);
+#endif
 
   switch (e->type) {
   case SAPP_EVENTTYPE_KEY_DOWN: g_app->key_state[e->key_code] = true; break;
@@ -195,6 +204,9 @@ static void render() {
     }
   } else {
     microui_begin();
+#ifndef NO_NUKLEAR
+    nuklear_begin();
+#endif
 
     lua_State *L = g_app->L;
 
@@ -213,6 +225,9 @@ static void render() {
     assert(lua_gettop(L) == 1);
 
     microui_end_and_present();
+#ifndef NO_NUKLEAR
+    nuklear_end_and_present();
+#endif
   }
 
   {
@@ -334,6 +349,9 @@ static void actually_cleanup() {
   }
 
   microui_trash();
+#ifndef NO_NUKLEAR
+  nuklear_trash();
+#endif
   gamepad_shutdown(&g_app->gamepad);
 
   {

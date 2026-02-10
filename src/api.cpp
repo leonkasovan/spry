@@ -16,6 +16,9 @@
 #include "json.h"
 #include "luax.h"
 #include "microui.h"
+#ifndef NO_NUKLEAR
+#include "nk_spry.h"
+#endif
 #include "os.h"
 #include "physics.h"
 #include "prelude.h"
@@ -3015,6 +3018,11 @@ void open_spry_api(lua_State *L) {
 
   open_microui(L);
   lua_setfield(L, -2, "microui");
+
+#ifndef NO_NUKLEAR
+  open_nuklear_api(L);
+  lua_setfield(L, -2, "nuklear");
+#endif
 
   lua_pop(L, 1);
 }

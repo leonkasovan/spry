@@ -53,6 +53,7 @@ spry examples/planes
 spry examples/dungeon
 spry examples/jump
 spry examples/boxes
+spry examples/nuklear_demo
 ```
 
 Spry can also run single Lua files:
@@ -115,6 +116,13 @@ Spry supports the following CMake options:
 - Set to OFF to exclude network modules and reduce binary size
 ```sh
 cmake -B build -DUSE_NETWORK=OFF
+```
+
+**USE_NUKLEAR** (default: ON)
+- Builds with the Nuklear immediate-mode GUI module (`spry.nuklear`)
+- Set to OFF to exclude the Nuklear UI module
+```sh
+cmake -B build -DUSE_NUKLEAR=OFF
 ```
 
 **USE_WAYLAND** (Linux only, default: OFF)
