@@ -23195,9 +23195,9 @@ nk_group_scrolled_offset_begin(struct nk_context *ctx,
         nk_flags f = panel.layout->flags;
         nk_group_scrolled_end(ctx);
         if (f & NK_WINDOW_CLOSED)
-            return NK_WINDOW_CLOSED;
+            return (nk_bool)NK_WINDOW_CLOSED;
         if (f & NK_WINDOW_MINIMIZED)
-            return NK_WINDOW_MINIMIZED;
+            return (nk_bool)NK_WINDOW_MINIMIZED;
     }
     return 1;
 }
@@ -25257,7 +25257,7 @@ nk_do_toggle(nk_flags *state,
     }
     if (style->draw_end)
         style->draw_end(out, style->userdata);
-    return (was_active != *active);
+    return (was_active != (int)*active);
 }
 /*----------------------------------------------------------------
  *
@@ -25344,7 +25344,7 @@ nk_checkbox_text(struct nk_context *ctx, const char *text, int len, nk_bool *act
     if (!ctx || !text || !active) return 0;
     old_val = *active;
     *active = nk_check_text(ctx, text, len, *active);
-    return old_val != *active;
+    return old_val != (int)*active;
 }
 NK_API nk_bool
 nk_checkbox_text_align(struct nk_context *ctx, const char *text, int len, nk_bool *active, nk_flags widget_alignment, nk_flags text_alignment)
@@ -25356,7 +25356,7 @@ nk_checkbox_text_align(struct nk_context *ctx, const char *text, int len, nk_boo
     if (!ctx || !text || !active) return 0;
     old_val = *active;
     *active = nk_check_text_align(ctx, text, len, *active, widget_alignment, text_alignment);
-    return old_val != *active;
+    return old_val != (int)*active;
 }
 NK_API nk_bool
 nk_checkbox_flags_text(struct nk_context *ctx, const char *text, int len,
@@ -25469,7 +25469,7 @@ nk_radio_text(struct nk_context *ctx, const char *text, int len, nk_bool *active
     if (!ctx || !text || !active) return 0;
     old_value = *active;
     *active = nk_option_text(ctx, text, len, old_value);
-    return old_value != *active;
+    return old_value != (int)*active;
 }
 NK_API nk_bool
 nk_radio_text_align(struct nk_context *ctx, const char *text, int len, nk_bool *active, nk_flags widget_alignment, nk_flags text_alignment)
@@ -25481,7 +25481,7 @@ nk_radio_text_align(struct nk_context *ctx, const char *text, int len, nk_bool *
     if (!ctx || !text || !active) return 0;
     old_value = *active;
     *active = nk_option_text_align(ctx, text, len, old_value, widget_alignment, text_alignment);
-    return old_value != *active;
+    return old_value != (int)*active;
 }
 NK_API nk_bool
 nk_option_label(struct nk_context *ctx, const char *label, nk_bool active)
@@ -25606,7 +25606,7 @@ nk_do_selectable(nk_flags *state, struct nk_command_buffer *out,
     if (style->draw_begin) style->draw_begin(out, style->userdata);
     nk_draw_selectable(out, *state, style, *value, &bounds, 0,0,NK_SYMBOL_NONE, str, len, align, font);
     if (style->draw_end) style->draw_end(out, style->userdata);
-    return old_value != *value;
+    return old_value != (int)*value;
 }
 NK_LIB nk_bool
 nk_do_selectable_image(nk_flags *state, struct nk_command_buffer *out,
@@ -25700,7 +25700,7 @@ nk_do_selectable_symbol(nk_flags *state, struct nk_command_buffer *out,
     if (style->draw_begin) style->draw_begin(out, style->userdata);
     nk_draw_selectable(out, *state, style, *value, &bounds, &icon, 0, sym, str, len, align, font);
     if (style->draw_end) style->draw_end(out, style->userdata);
-    return old_value != *value;
+    return old_value != (int)*value;
 }
 
 NK_API nk_bool

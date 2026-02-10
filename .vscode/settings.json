@@ -1,0 +1,31 @@
+{
+  "terminal.integrated.profiles.windows": {
+    "w64devkit": {
+      "path": "F:/w64devkit/bin/sh.exe",
+      "env": {
+        "PATH": "F:\\w64devkit\\bin;F:\\go-go1.25.4\\bin"
+      },
+      "cwd": "${workspaceFolder}"
+    },
+    "VS2022 x64 Native DevCmd": {
+      "path": "${env:comspec}",
+      "args": [
+        "/k",
+        "C:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\VC\\Auxiliary\\Build\\vcvars64.bat"
+      ],
+      "icon": "terminal-cmd"
+    },
+    "MinGW64": {
+      "path": "F:/msys2/usr/bin/bash.exe",
+      "args": [
+        "--login",
+        "-i"
+      ],
+      "env": {
+        "MSYSTEM": "UCRT64",
+        "CHERE_INVOKING": "1"
+      }
+    }
+  },
+  "terminal.integrated.defaultProfile.windows": "VS2022 x64 Native DevCmd"
+}
