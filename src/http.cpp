@@ -13,6 +13,16 @@
 //   HTML5: no TLS support
 // ============================================================
 
+#ifdef NO_NETWORK
+
+#include "http.h"
+#include <lauxlib.h>
+#include <lua.h>
+void open_http_api(lua_State *L) { (void)L; }
+void http_shutdown(void) {}
+
+#else // NO_NETWORK
+
 #include "http.h"
 #include "array.h"
 #include "luax.h"
@@ -1866,3 +1876,5 @@ void http_shutdown(void) {
   }
 #endif
 }
+
+#endif // NO_NETWORK

@@ -346,7 +346,9 @@ static void actually_cleanup() {
     PROFILE_BLOCK("destroy assets");
 
     lua_channels_shutdown();
+#ifndef NO_NETWORK
     http_shutdown();
+#endif
 
     if (g_app->default_font != nullptr) {
       g_app->default_font->trash();
@@ -421,8 +423,10 @@ static void setup_lua() {
 
   luaL_openlibs(L);
   open_spry_api(L);
+#ifndef NO_NETWORK
   open_luasocket(L);
   open_http_api(L);
+#endif
   luax_run_bootstrap(L);
 
   // add error message handler. always at the bottom of stack.

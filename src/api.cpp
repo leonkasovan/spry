@@ -29,6 +29,7 @@
 #include <box2d/box2d.h>
 
 #ifndef IS_HTML5
+#ifndef NO_NETWORK
 #include "embed/ltn12_compressed.h"
 #include "embed/mbox_compressed.h"
 #include "embed/mime_compressed.h"
@@ -40,10 +41,13 @@
 #include "embed/socket_tp_compressed.h"
 #include "embed/socket_url_compressed.h"
 #endif
+#endif
 
 extern "C" {
+#ifndef NO_NETWORK
 #include "deps/luasocket/luasocket.h"
 #include "deps/luasocket/mime.h"
+#endif
 #include <lauxlib.h>
 #include <lua.h>
 }
@@ -3015,7 +3019,7 @@ void open_spry_api(lua_State *L) {
   lua_pop(L, 1);
 }
 
-#ifdef IS_HTML5
+#if defined(IS_HTML5) || defined(NO_NETWORK)
 
 void open_luasocket(lua_State *L) {}
 
@@ -3096,4 +3100,4 @@ void open_luasocket(lua_State *L) {
   package_preload(L, "socket.tp", open_embed_socket_tp);
   package_preload(L, "socket.url", open_embed_socket_url);
 }
-#endif // IS_HTML5
+#endif // IS_HTML5 || NO_NETWORK

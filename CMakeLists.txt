@@ -69,6 +69,7 @@ set(LUASOCKET
 )
 
 message(STATUS "Platform flags: EMSCRIPTEN=${EMSCRIPTEN}, WIN32=${WIN32}, UNIX=${UNIX}, MINGW=${MINGW}, MSYS=${MSYS}")
+option(USE_NETWORK "Build with HTTP module and luasocket" ON)
 add_compile_definitions(NDEBUG)
 
 if(EMSCRIPTEN)
@@ -80,13 +81,17 @@ if(EMSCRIPTEN)
 
 elseif(MINGW)
   message(STATUS "Detected platform: MinGW")
-  set(LUASOCKET ${LUASOCKET} src/deps/luasocket/wsocket.c)
+  if(USE_NETWORK)
+    set(LUASOCKET ${LUASOCKET} src/deps/luasocket/wsocket.c)
+  endif()
   add_compile_definitions(LUA_USE_LONGJMP)
   set(LFLAGS -lws2_32 -lxinput)
 
 elseif(WIN32)
   message(STATUS "Detected platform: Windows")
-  set(LUASOCKET ${LUASOCKET} src/deps/luasocket/wsocket.c)
+  if(USE_NETWORK)
+    set(LUASOCKET ${LUASOCKET} src/deps/luasocket/wsocket.c)
+  endif()
   add_compile_definitions(LUA_USE_LONGJMP)
   set(LFLAGS ws2_32 xinput)
 
@@ -94,14 +99,16 @@ elseif(UNIX)
   message(STATUS "Detected platform: Unix")
   option(USE_WAYLAND "Build with Wayland instead of X11" OFF)
   option(USE_DRM "Build with DRM/KMS (no display server, direct rendering)" OFF)
-  set(LUASOCKET
-    ${LUASOCKET}
-    src/deps/luasocket/serial.c
-    src/deps/luasocket/unix.c
-    src/deps/luasocket/unixdgram.c
-    src/deps/luasocket/unixstream.c
-    src/deps/luasocket/usocket.c
-  )
+  if(USE_NETWORK)
+    set(LUASOCKET
+      ${LUASOCKET}
+      src/deps/luasocket/serial.c
+      src/deps/luasocket/unix.c
+      src/deps/luasocket/unixdgram.c
+      src/deps/luasocket/unixstream.c
+      src/deps/luasocket/usocket.c
+    )
+  endif()
   add_compile_definitions(LUA_USE_LINUX)
   if(USE_WAYLAND)
     message(STATUS "Display server: Wayland")
@@ -118,6 +125,12 @@ elseif(UNIX)
     message(STATUS "Display server: X11")
     set(LFLAGS -lX11 -lXi -lXcursor -lasound -lGL -ldl -lpthread -lm)
   endif()
+endif()
+
+if(NOT USE_NETWORK)
+  message(STATUS "Network disabled: skipping HTTP module and luasocket")
+  set(LUASOCKET)
+  add_compile_definitions(NO_NETWORK)
 endif()
 
 file(GLOB SOURCES CONFIGURE_DEPENDS src/*.cpp src/*.h)

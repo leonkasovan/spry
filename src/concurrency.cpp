@@ -36,6 +36,7 @@ static void lua_thread_proc(void *udata) {
     open_spry_api(L);
   }
 
+#ifndef NO_NETWORK
   {
     PROFILE_BLOCK("open luasocket");
     open_luasocket(L);
@@ -45,6 +46,7 @@ static void lua_thread_proc(void *udata) {
     PROFILE_BLOCK("open http");
     open_http_api(L);
   }
+#endif
 
   {
     PROFILE_BLOCK("run bootstrap");

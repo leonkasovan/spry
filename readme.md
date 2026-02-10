@@ -95,6 +95,23 @@ that has both `gcc` and `clang` installed, since CMake would likely choose
 cmake -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_C_COMPILER=clang -DCMAKE_BUILD_TYPE=Release ..
 ```
 
+### Build options
+
+Spry supports the following CMake options:
+
+**USE_NETWORK** (default: ON)
+- Builds with HTTP/HTTPS client module and luasocket networking support
+- Set to OFF to exclude network modules and reduce binary size
+```sh
+cmake -B build -DUSE_NETWORK=OFF
+```
+
+**USE_WAYLAND** (Linux only, default: OFF)
+- Use Wayland display server instead of X11
+
+**USE_DRM** (Linux only, default: OFF)
+- Use DRM/KMS for direct rendering without a display server
+
 This command should be used when building for web browsers:
 
 ```sh
