@@ -33,6 +33,10 @@ void http_shutdown(void) {}
 #include <atomic>
 #include <string.h>
 
+#ifndef IS_WIN32
+#define _strdup strdup
+#endif
+
 extern "C" {
 #include <lauxlib.h>
 #include <lua.h>
