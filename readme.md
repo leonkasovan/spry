@@ -55,6 +55,17 @@ spry examples/jump
 spry examples/boxes
 ```
 
+Spry can also run single Lua files:
+
+```sh
+spry myscript.lua
+spry path/to/script.lua
+```
+
+When running a single file, only that script is loaded (not all `.lua` files
+in the directory). The script can still `require()` other modules from the
+same directory.
+
 ## Building from source
 
 Requires CMake and one of the following C/C++ compilers depending on the
