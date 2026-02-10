@@ -487,10 +487,43 @@ sapp_desc sokol_main(int argc, char **argv) {
   PROFILE_FUNC();
 
   const char *mount_path = nullptr;
+  const char *script_file = nullptr;
 
   for (i32 i = 1; i < argc; i++) {
     if (argv[i][0] != '-') {
       mount_path = argv[i];
+      
+      // Check if it's a single .lua file
+      String path_str = mount_path;
+      if (path_str.ends_with(".lua")) {
+        // Extract directory and filename
+        u64 slash_pos = path_str.last_of('/');
+        u64 backslash_pos = path_str.last_of('\\');
+        
+        // Find the rightmost separator (handling -1 which is u64 max)
+        u64 sep_pos = (u64)-1;
+        if (slash_pos != (u64)-1 && backslash_pos != (u64)-1) {
+          sep_pos = slash_pos > backslash_pos ? slash_pos : backslash_pos;
+        } else if (slash_pos != (u64)-1) {
+          sep_pos = slash_pos;
+        } else if (backslash_pos != (u64)-1) {
+          sep_pos = backslash_pos;
+        }
+        
+        if (sep_pos != (u64)-1) {
+          // Has directory separator - split into directory and filename
+          char *dir_copy = (char *)mem_alloc(sep_pos + 2);
+          memcpy(dir_copy, mount_path, sep_pos + 1);
+          dir_copy[sep_pos + 1] = '\0';
+          mount_path = dir_copy;
+          script_file = argv[i] + sep_pos + 1;
+        } else {
+          // No directory separator - file in current directory
+          mount_path = ".";
+          script_file = argv[i];
+        }
+      }
+      
       break;
     }
   }
@@ -511,7 +544,8 @@ sapp_desc sokol_main(int argc, char **argv) {
   g_app->is_fused.store(mount.is_fused);
 
   if (!g_app->error_mode.load() && mount.ok) {
-    asset_load_kind(AssetKind_LuaRef, "main.lua", nullptr);
+    const char *entry_script = script_file ? script_file : "main.lua";
+    asset_load_kind(AssetKind_LuaRef, entry_script, nullptr);
   }
 
   if (!g_app->error_mode.load()) {
@@ -554,7 +588,10 @@ sapp_desc sokol_main(int argc, char **argv) {
   lua_pop(L, 1); // conf table
 
   if (!g_app->error_mode.load() && startup_load_scripts && mount.ok) {
-    load_all_lua_scripts(L);
+    // Only load all scripts if running from a directory (not a single file)
+    if (!script_file) {
+      load_all_lua_scripts(L);
+    }
   }
 
   g_app->hot_reload_enabled.store(mount.can_hot_reload && hot_reload);
