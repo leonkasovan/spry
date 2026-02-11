@@ -8,6 +8,11 @@
 #elif defined(IS_HTML5)
 #include <unistd.h>
 
+#elif defined(IS_ANDROID)
+#include <sys/stat.h>
+#include <time.h>
+#include <unistd.h>
+
 #elif defined(IS_LINUX)
 #include <sched.h>
 #include <sys/stat.h>
@@ -16,7 +21,11 @@
 
 #endif
 
+#if defined(IS_ANDROID)
+i32 os_change_dir(const char *path) { return -1; }  // Not supported on Android
+#else
 i32 os_change_dir(const char *path) { return chdir(path); }
+#endif
 
 String os_program_dir() {
   String str = os_program_path();
@@ -118,3 +127,30 @@ void os_sleep(u32 ms) {}
 void os_yield() {}
 
 #endif // IS_HTML5
+
+#ifdef IS_ANDROID
+
+String os_program_path() { return {}; }
+
+u64 os_file_modtime(const char *filename) {
+  struct stat attrib = {};
+  i32 err = stat(filename, &attrib);
+  if (err == 0) {
+    return (u64)attrib.st_mtime;
+  } else {
+    return 0;
+  }
+}
+
+void os_high_timer_resolution() {}
+
+void os_sleep(u32 ms) {
+  struct timespec ts;
+  ts.tv_sec = ms / 1000;
+  ts.tv_nsec = (ms % 1000) * 1000000;
+  nanosleep(&ts, &ts);
+}
+
+void os_yield() { sched_yield(); }
+
+#endif // IS_ANDROID

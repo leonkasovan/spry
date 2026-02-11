@@ -24,7 +24,7 @@
 #include "sync.h"
 #include "vfs.h"
 
-#if defined(IS_LINUX) || defined(__linux__)
+#if defined(IS_LINUX) || defined(__linux__) || defined(__ANDROID__)
 #include <GLES3/gl3.h>
 #elif defined(SOKOL_GLCORE33)
 #include <GL/gl.h>

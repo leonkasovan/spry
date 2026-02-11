@@ -15,6 +15,9 @@
 #elif defined(__EMSCRIPTEN__)
 #define IS_HTML5
 
+#elif defined(__ANDROID__)
+#define IS_ANDROID
+
 #elif defined(__linux__) || defined(__unix__)
 #define IS_LINUX
 

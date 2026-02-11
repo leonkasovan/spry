@@ -22,6 +22,8 @@ extern "C" {
 #if defined(_WIN32)
 #define SOKOL_D3D11
 #define SOKOL_WIN32_FORCE_MAIN
+#elif defined(__ANDROID__)
+#define SOKOL_GLES3
 #elif defined(__linux__)
 #ifdef SOKOL_USE_GLES3
 #define SOKOL_GLES3
@@ -59,6 +61,7 @@ extern "C" {
 #define MA_ENABLE_WASAPI
 #define MA_ENABLE_ALSA
 #define MA_ENABLE_WEBAUDIO
+#define MA_ENABLE_AAUDIO
 #define MA_NO_ENCODING
 #define MA_NO_GENERATION
 #define MINIAUDIO_IMPLEMENTATION

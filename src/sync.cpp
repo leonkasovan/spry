@@ -10,6 +10,11 @@
 #include <unistd.h>
 #endif
 
+#ifdef IS_ANDROID
+#include <sys/syscall.h>
+#include <unistd.h>
+#endif
+
 #ifdef IS_WIN32
 
 void Mutex::make() { srwlock = {}; }
@@ -143,6 +148,15 @@ uint64_t this_thread_id() {
 }
 
 #endif // IS_LINUX
+
+#ifdef IS_ANDROID
+
+uint64_t this_thread_id() {
+  thread_local uint64_t s_tid = syscall(SYS_gettid);
+  return s_tid;
+}
+
+#endif // IS_ANDROID
 
 #ifdef IS_HTML5
 

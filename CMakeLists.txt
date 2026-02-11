@@ -68,7 +68,7 @@ set(LUASOCKET
   src/deps/luasocket/udp.c
 )
 
-message(STATUS "Platform flags: EMSCRIPTEN=${EMSCRIPTEN}, WIN32=${WIN32}, UNIX=${UNIX}, MINGW=${MINGW}, MSYS=${MSYS}")
+message(STATUS "Platform flags: EMSCRIPTEN=${EMSCRIPTEN}, WIN32=${WIN32}, UNIX=${UNIX}, MINGW=${MINGW}, MSYS=${MSYS}, ANDROID=${ANDROID}")
 option(USE_NETWORK "Build with HTTP module and luasocket" ON)
 option(USE_NUKLEAR "Build with Nuklear UI module" ON)
 add_compile_definitions(NDEBUG)
@@ -79,6 +79,14 @@ if(EMSCRIPTEN)
   add_compile_definitions(LUA_USE_LONGJMP LUA_USE_POSIX)
   set(CFLAGS -fno-exceptions)
   set(LFLAGS -lpthread -sASYNCIFY -sALLOW_MEMORY_GROWTH -sUSE_WEBGL2)
+
+elseif(ANDROID)
+  message(STATUS "Detected platform: Android")
+  set(LUASOCKET)
+  set(USE_NETWORK OFF)
+  add_compile_definitions(NO_NETWORK LUA_USE_LONGJMP LUA_USE_POSIX)
+  set(CFLAGS -fno-exceptions)
+  set(LFLAGS android log EGL GLESv3)
 
 elseif(MINGW)
   message(STATUS "Detected platform: MinGW")
@@ -144,7 +152,13 @@ else()
 endif()
 
 file(GLOB SOURCES CONFIGURE_DEPENDS src/*.cpp src/*.h)
-add_executable(${PROJECT_NAME} ${SOURCES} ${BOX2D} ${LUASOCKET})
+
+if(ANDROID)
+  add_library(${PROJECT_NAME} SHARED ${SOURCES} ${BOX2D} ${LUASOCKET})
+else()
+  add_executable(${PROJECT_NAME} ${SOURCES} ${BOX2D} ${LUASOCKET})
+endif()
+
 target_include_directories(${PROJECT_NAME} PRIVATE src/deps/box2d src/deps/lua)
 target_compile_options(${PROJECT_NAME} PRIVATE ${CFLAGS})
 target_link_libraries(${PROJECT_NAME} PRIVATE ${LFLAGS})
