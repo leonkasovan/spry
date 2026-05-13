@@ -9,7 +9,14 @@
 
 extern "C" {
 #define MAKE_LIB
+#ifdef __GNUC__
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wstringop-overflow"
+#endif
 #include "deps/lua/onelua.c"
+#ifdef __GNUC__
+#pragma GCC diagnostic pop
+#endif
 }
 
 #undef RELATIVE
@@ -41,7 +48,14 @@ extern "C" {
 #include "deps/sokol_time.h"
 
 #define STB_IMAGE_IMPLEMENTATION
+#ifdef __GNUC__
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wstringop-overflow"
+#endif
 #include "deps/stb_image.h"
+#ifdef __GNUC__
+#pragma GCC diagnostic pop
+#endif
 
 #define STB_IMAGE_RESIZE_IMPLEMENTATION
 #include "deps/stb_image_resize2.h"

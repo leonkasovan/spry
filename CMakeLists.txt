@@ -71,7 +71,6 @@ set(LUASOCKET
 message(STATUS "Platform flags: EMSCRIPTEN=${EMSCRIPTEN}, WIN32=${WIN32}, UNIX=${UNIX}, MINGW=${MINGW}, MSYS=${MSYS}, ANDROID=${ANDROID}")
 option(USE_NETWORK "Build with HTTP module and luasocket" ON)
 option(USE_NUKLEAR "Build with Nuklear UI module" ON)
-add_compile_definitions(NDEBUG)
 
 if(EMSCRIPTEN)
   message(STATUS "Detected platform: Emscripten")
@@ -162,3 +161,7 @@ endif()
 target_include_directories(${PROJECT_NAME} PRIVATE src/deps/box2d src/deps/lua)
 target_compile_options(${PROJECT_NAME} PRIVATE ${CFLAGS})
 target_link_libraries(${PROJECT_NAME} PRIVATE ${LFLAGS})
+
+if(MINGW)
+  target_link_options(${PROJECT_NAME} PRIVATE $<$<CONFIG:Release>:-s>)
+endif()

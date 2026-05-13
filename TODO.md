@@ -39,8 +39,8 @@ A prioritized task list for improving the Spry 2D game framework.
 ### 2.3 Microui character input truncation breaks Unicode ✓
 - **Fixed:** `src/microui.cpp` — replaced `char_code % 256` with proper UTF-8 encoding for codepoints up to 0x10FFFF.
 
-### 2.4 `Atlas::load` debug print uses wrong field ✓
-- **Fixed:** `src/atlas.cpp` — changed `by_name.load` to `by_name.len`.
+### 2.4 `Atlas::load` debug print was fine
+- **No change needed:** HashMap's `load` field IS the live entry count (just misleadingly named). Originally changed to `len` but that field doesn't exist — reverted.
 
 ### 2.5 `g_app->default_font` lazy initialization in multiple places ✓
 - **Fixed:** `src/app.h` — added `load_default_font()` helper. Updated `src/main.cpp` and `src/api.cpp` to use it.

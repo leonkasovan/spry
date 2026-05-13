@@ -81,7 +81,7 @@ bool Atlas::load(String filepath, bool generate_mips) {
 
 #ifndef NDEBUG
   printf("created atlas with image id: %d and %llu entries\n", img.id,
-         (unsigned long long)by_name.len);
+         (unsigned long long)by_name.load);
 #endif
 
   Atlas a;

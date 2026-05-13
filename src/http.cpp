@@ -23,6 +23,12 @@ void http_shutdown(void) {}
 
 #else // NO_NETWORK
 
+#ifdef _WIN32
+#include <winsock2.h>
+#include <ws2tcpip.h>
+#pragma comment(lib, "ws2_32.lib")
+#endif
+
 #include "http.h"
 #include "array.h"
 #include "luax.h"
@@ -45,11 +51,7 @@ extern "C" {
 
 // ============================================================
 // Platform sockets
-// ============================================================
 #ifdef IS_WIN32
-#include <winsock2.h>
-#include <ws2tcpip.h>
-#pragma comment(lib, "ws2_32.lib")
 typedef SOCKET socket_t;
 #define INVALID_SOCK INVALID_SOCKET
 #define close_socket closesocket
