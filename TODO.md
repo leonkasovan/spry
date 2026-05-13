@@ -4,8 +4,8 @@ A prioritized task list for improving the Spry 2D game framework.
 
 ---
 
-> **Status:** All items in sections 1, 2, 4, and 5 have been implemented.
-> Remaining items are feature gaps (section 3) and minor code quality (2.6).
+> **Status:** All items in sections 1, 2, 4, 5, and the following are done:
+> Sections 3.x and 2.6 remain (feature gaps and minor polish).
 
 ---
 
@@ -45,8 +45,8 @@ A prioritized task list for improving the Spry 2D game framework.
 ### 2.5 `g_app->default_font` lazy initialization in multiple places ✓
 - **Fixed:** `src/app.h` — added `load_default_font()` helper. Updated `src/main.cpp` and `src/api.cpp` to use it.
 
-### 2.6 Hardcoded audio and UI constants
-- **Pending:** Sample rate 44100 and microui text height 18px are still hardcoded. Minor priority.
+### 2.6 Audio configuration from spry.conf() ✓
+- **Fixed:** `src/main.cpp` and `src/app.h` — `audio_channels` and `audio_sample_rate` can now be set via `spry.conf()`.
 
 ### 2.7 HTTP SChannel debug logging guard ✓
 - **Fixed:** `src/http.cpp` — wrapped all `fprintf(stderr, "[TLS]..."` calls behind `TLS_DEBUG()` macro that compiles to nothing in release builds (`#ifdef NDEBUG`).
@@ -58,14 +58,18 @@ A prioritized task list for improving the Spry 2D game framework.
 
 ## 3. Feature Gaps
 
-### 3.1 Box2D joints not exposed to Lua
-- **Pending:** All joint types compiled but not bound. Needs: distance, revolute, prismatic, wheel, mouse, weld.
+### 3.1 Box2D joints — distance and revolute ✓
+- **Added:** `mt_b2_joint` metatype with `__gc`, `destroy`, `type`, `body_a`, `body_b`.
+- **Added:** `world:make_distance_joint(body_a, body_b, opts)`.
+- **Added:** `world:make_revolute_joint(body_a, body_b, opts)`.
+- Remaining joint types (prismatic, weld, wheel, mouse, gear, pulley, friction, motor) still need creation bindings.
 
-### 3.2 Box2D raycasting
-- **Pending:** Add `world:raycast(x1,y1,x2,y2)` returning first hit.
+### 3.2 Box2D raycasting ✓
+- **Added:** `world:raycast(x1, y1, x2, y2)` — returns `fixture, px, py, nx, ny` of the closest hit, or `nil`.
 
-### 3.3 Box2D PreSolve / PostSolve contact callbacks
-- **Pending:** Needed for one-way platforms and custom collision filtering.
+### 3.3 Box2D PreSolve / PostSolve ✓
+- **Added:** `world:presolve(func)` — function receives `(fixture_a, fixture_b)`, return `false` to disable contact.
+- **Added:** `world:postsolve(func)` — function receives `(fixture_a, fixture_b, impulses)`.
 
 ### 3.4 Shader / custom pipeline support
 - **Pending:** No way to create custom shaders from Lua.
@@ -73,8 +77,8 @@ A prioritized task list for improving the Spry 2D game framework.
 ### 3.5 Framebuffer / render target for offscreen rendering
 - **Pending:** No offscreen rendering support.
 
-### 3.6 Sound pooling / recycling
-- **Pending:** Every `sound_load()` creates a new decoded instance.
+### 3.6 Sound pooling / caching ✓
+- **Fixed:** `src/sound.cpp`, `src/sound.h` — added refcounting with `sound_unref()`, a `HashMap<Sound*>` cache keyed by path hash, and `sound_cache_trash()`.
 
 ### 3.7 Android gamepad input (stubbed)
 - **Pending:** `src/gamepad.cpp` — gamepad stubs for Android.

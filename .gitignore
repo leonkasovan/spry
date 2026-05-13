@@ -16,7 +16,7 @@ dist
 /spry.js
 /*.zip
 /*.json
-/build
+/build*
 /debug
 /release
 /emdebug

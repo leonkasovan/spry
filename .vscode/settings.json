@@ -7,13 +7,16 @@
       },
       "cwd": "${workspaceFolder}"
     },
-    "VS2022 x64 Native DevCmd": {
-      "path": "${env:comspec}",
+    "VS2022 Developer Command Prompt": {
+      "path": "C:\\Windows\\System32\\cmd.exe",
       "args": [
         "/k",
-        "C:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\VC\\Auxiliary\\Build\\vcvars64.bat"
+        "C:\\Program Files\\Microsoft Visual Studio\\2022\\Professional\\Common7\\Tools\\VsDevCmd.bat",
+        "-arch=x64",
+        "-host_arch=x64"
       ],
-      "icon": "terminal-cmd"
+      "icon": "terminal-cmd",
+      "overrideName": true
     },
     "MinGW64": {
       "path": "C:/msys2/usr/bin/bash.exe",
@@ -27,5 +30,5 @@
       }
     }
   },
-  "terminal.integrated.defaultProfile.windows": "w64devkit"
+  "terminal.integrated.defaultProfile.windows": "VS2022 Developer Command Prompt"
 }

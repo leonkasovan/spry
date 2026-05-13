@@ -25,6 +25,8 @@ struct PhysicsContactListener : public b2ContactListener {
   Physics physics = {};
   i32 begin_contact_ref = LUA_REFNIL;
   i32 end_contact_ref = LUA_REFNIL;
+  i32 presolve_ref = LUA_REFNIL;
+  i32 postsolve_ref = LUA_REFNIL;
 
   void setup_contact(b2Contact *contact, i32 *msgh, PhysicsUserData **pud_a,
                      PhysicsUserData **pud_b) {
@@ -77,6 +79,64 @@ struct PhysicsContactListener : public b2ContactListener {
 
     lua_pop(L, 2);
   }
+
+  void PreSolve(b2Contact *contact, const b2Manifold *) {
+    if (presolve_ref == LUA_REFNIL) return;
+
+    lua_pushcfunction(L, luax_msgh);
+    i32 msgh = lua_gettop(L);
+
+    Physics a = physics_weak_copy(&physics);
+    a.fixture = contact->GetFixtureA();
+    Physics b = physics_weak_copy(&physics);
+    b.fixture = contact->GetFixtureB();
+
+    luax_new_userdata(L, a, "mt_b2_fixture");
+    luax_new_userdata(L, b, "mt_b2_fixture");
+
+    i32 type = lua_rawgeti(L, LUA_REGISTRYINDEX, presolve_ref);
+    if (type == LUA_TFUNCTION) {
+      lua_pushvalue(L, -3);
+      lua_pushvalue(L, -3);
+      if (lua_pcall(L, 2, 1, msgh) == LUA_OK && lua_isboolean(L, -1)) {
+        if (!lua_toboolean(L, -1)) {
+          contact->SetEnabled(false);
+        }
+        lua_pop(L, 1);
+      }
+    }
+
+    lua_pop(L, 2);
+  }
+
+  void PostSolve(b2Contact *contact, const b2ContactImpulse *impulse) {
+    if (postsolve_ref == LUA_REFNIL) return;
+
+    lua_pushcfunction(L, luax_msgh);
+    i32 msgh = lua_gettop(L);
+
+    Physics a = physics_weak_copy(&physics);
+    a.fixture = contact->GetFixtureA();
+    Physics b = physics_weak_copy(&physics);
+    b.fixture = contact->GetFixtureB();
+
+    luax_new_userdata(L, a, "mt_b2_fixture");
+    luax_new_userdata(L, b, "mt_b2_fixture");
+
+    i32 type = lua_rawgeti(L, LUA_REGISTRYINDEX, postsolve_ref);
+    if (type == LUA_TFUNCTION) {
+      lua_pushvalue(L, -3);
+      lua_pushvalue(L, -3);
+      lua_createtable(L, impulse->count, 0);
+      for (i32 i = 0; i < impulse->count; i++) {
+        lua_pushnumber(L, impulse->normalImpulses[i]);
+        lua_rawseti(L, -2, i + 1);
+      }
+      lua_pcall(L, 3, 0, msgh);
+    }
+
+    lua_pop(L, 2);
+  }
 };
 
 Physics physics_world_make(lua_State *L, b2Vec2 gravity, float meter) {
@@ -103,6 +163,12 @@ void physics_world_trash(lua_State *L, Physics *p) {
   if (p->contact_listener->end_contact_ref != LUA_REFNIL) {
     luaL_unref(L, LUA_REGISTRYINDEX, p->contact_listener->end_contact_ref);
   }
+  if (p->contact_listener->presolve_ref != LUA_REFNIL) {
+    luaL_unref(L, LUA_REGISTRYINDEX, p->contact_listener->presolve_ref);
+  }
+  if (p->contact_listener->postsolve_ref != LUA_REFNIL) {
+    luaL_unref(L, LUA_REGISTRYINDEX, p->contact_listener->postsolve_ref);
+  }
 
   delete p->contact_listener;
   delete p->world;
@@ -110,24 +176,28 @@ void physics_world_trash(lua_State *L, Physics *p) {
   p->world = nullptr;
 }
 
-void physics_world_begin_contact(lua_State *L, Physics *p, i32 arg) {
-  if (p->contact_listener->begin_contact_ref != LUA_REFNIL) {
-    luaL_unref(L, LUA_REGISTRYINDEX, p->contact_listener->begin_contact_ref);
+static void set_world_callback_ref(lua_State *L, i32 *ref, i32 arg) {
+  if (*ref != LUA_REFNIL) {
+    luaL_unref(L, LUA_REGISTRYINDEX, *ref);
   }
-
   lua_pushvalue(L, arg);
-  i32 ref = luaL_ref(L, LUA_REGISTRYINDEX);
-  p->contact_listener->begin_contact_ref = ref;
+  *ref = luaL_ref(L, LUA_REGISTRYINDEX);
+}
+
+void physics_world_begin_contact(lua_State *L, Physics *p, i32 arg) {
+  set_world_callback_ref(L, &p->contact_listener->begin_contact_ref, arg);
 }
 
 void physics_world_end_contact(lua_State *L, Physics *p, i32 arg) {
-  if (p->contact_listener->end_contact_ref != LUA_REFNIL) {
-    luaL_unref(L, LUA_REGISTRYINDEX, p->contact_listener->end_contact_ref);
-  }
+  set_world_callback_ref(L, &p->contact_listener->end_contact_ref, arg);
+}
 
-  lua_pushvalue(L, arg);
-  i32 ref = luaL_ref(L, LUA_REGISTRYINDEX);
-  p->contact_listener->end_contact_ref = ref;
+void physics_world_presolve(lua_State *L, Physics *p, i32 arg) {
+  set_world_callback_ref(L, &p->contact_listener->presolve_ref, arg);
+}
+
+void physics_world_postsolve(lua_State *L, Physics *p, i32 arg) {
+  set_world_callback_ref(L, &p->contact_listener->postsolve_ref, arg);
 }
 
 Physics physics_weak_copy(Physics *p) {
@@ -208,6 +278,38 @@ void physics_push_userdata(lua_State *L, u64 ptr) {
   case LUA_TSTRING: lua_pushstring(L, pud->str); break;
   default: lua_pushnil(L); break;
   }
+}
+
+struct RaycastCallback : public b2RayCastCallback {
+  b2Fixture *fixture = nullptr;
+  b2Vec2 point;
+  b2Vec2 normal;
+  float fraction = 1.0f;
+
+  float ReportFixture(b2Fixture *f, const b2Vec2 &pt, const b2Vec2 &nrm, float frac) {
+    if (!fixture || frac < fraction) {
+      fixture = f;
+      point = pt;
+      normal = nrm;
+      fraction = frac;
+    }
+    return 1.0f;
+  }
+};
+
+bool physics_world_raycast(Physics *p, float x1, float y1, float x2, float y2,
+                           b2Fixture **out_fixture, b2Vec2 *out_point, b2Vec2 *out_normal) {
+  RaycastCallback cb;
+  b2Vec2 p1(x1 / p->meter, y1 / p->meter);
+  b2Vec2 p2(x2 / p->meter, y2 / p->meter);
+  p->world->RayCast(&cb, p1, p2);
+  if (cb.fixture) {
+    *out_fixture = cb.fixture;
+    *out_point = b2Vec2(cb.point.x * p->meter, cb.point.y * p->meter);
+    *out_normal = cb.normal;
+    return true;
+  }
+  return false;
 }
 
 void draw_fixtures_for_body(b2Body *body, float meter) {

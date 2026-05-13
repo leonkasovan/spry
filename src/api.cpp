@@ -264,15 +264,7 @@ static ma_sound *sound_ma(lua_State *L) {
 
 static int mt_sound_gc(lua_State *L) {
   Sound *sound = *(Sound **)luaL_checkudata(L, 1, "mt_sound");
-
-  if (ma_sound_at_end(&sound->ma)) {
-    sound->trash();
-    mem_free(sound);
-  } else {
-    sound->zombie = true;
-    g_app->garbage_sounds.push(sound);
-  }
-
+  sound_unref(sound);
   return 0;
 }
 
@@ -1200,6 +1192,100 @@ static int mt_b2_world_end_contact(lua_State *L) {
   return 0;
 }
 
+static int mt_b2_world_presolve(lua_State *L) {
+  Physics *physics = (Physics *)luaL_checkudata(L, 1, "mt_b2_world");
+  if (lua_type(L, 2) != LUA_TFUNCTION) {
+    return luaL_error(L, "expected argument 2 to be a function");
+  }
+  physics_world_presolve(L, physics, 2);
+  return 0;
+}
+
+static int mt_b2_world_postsolve(lua_State *L) {
+  Physics *physics = (Physics *)luaL_checkudata(L, 1, "mt_b2_world");
+  if (lua_type(L, 2) != LUA_TFUNCTION) {
+    return luaL_error(L, "expected argument 2 to be a function");
+  }
+  physics_world_postsolve(L, physics, 2);
+  return 0;
+}
+
+static int mt_b2_world_raycast(lua_State *L) {
+  Physics *physics = (Physics *)luaL_checkudata(L, 1, "mt_b2_world");
+  float x1 = (float)luaL_checknumber(L, 2);
+  float y1 = (float)luaL_checknumber(L, 3);
+  float x2 = (float)luaL_checknumber(L, 4);
+  float y2 = (float)luaL_checknumber(L, 5);
+
+  b2Fixture *fixture = nullptr;
+  b2Vec2 point, normal;
+  if (physics_world_raycast(physics, x1, y1, x2, y2, &fixture, &point, &normal)) {
+    Physics p = physics_weak_copy(physics);
+    p.fixture = fixture;
+    luax_new_userdata(L, p, "mt_b2_fixture");
+    lua_pushnumber(L, point.x);
+    lua_pushnumber(L, point.y);
+    lua_pushnumber(L, normal.x);
+    lua_pushnumber(L, normal.y);
+    return 5;
+  }
+
+  return 0;
+}
+
+static int mt_b2_world_make_distance_joint(lua_State *L) {
+  Physics *physics = (Physics *)luaL_checkudata(L, 1, "mt_b2_world");
+  Physics *body_a_phys = (Physics *)luaL_checkudata(L, 2, "mt_b2_body");
+  Physics *body_b_phys = (Physics *)luaL_checkudata(L, 3, "mt_b2_body");
+  luaL_checktype(L, 4, LUA_TTABLE);
+
+  float ax = (float)luax_opt_number_field(L, 4, "anchor_x", 0) / physics->meter;
+  float ay = (float)luax_opt_number_field(L, 4, "anchor_y", 0) / physics->meter;
+  float bx = (float)luax_opt_number_field(L, 4, "anchor_bx", ax) / physics->meter;
+  float by = (float)luax_opt_number_field(L, 4, "anchor_by", ay) / physics->meter;
+
+  b2DistanceJointDef def;
+  def.Initialize(body_a_phys->body, body_b_phys->body,
+                 b2Vec2(ax, ay), b2Vec2(bx, by));
+
+  float length = (float)luax_opt_number_field(L, 4, "length", -1);
+  if (length >= 0) def.length = length / physics->meter;
+
+  float stiffness = (float)luax_opt_number_field(L, 4, "stiffness", 0);
+  float damping = (float)luax_opt_number_field(L, 4, "damping", 0);
+  if (stiffness > 0) def.stiffness = stiffness;
+  if (damping > 0) def.damping = damping;
+
+  Physics p = physics_weak_copy(physics);
+  p.joint = physics->world->CreateJoint(&def);
+  luax_new_userdata(L, p, "mt_b2_joint");
+  return 1;
+}
+
+static int mt_b2_world_make_revolute_joint(lua_State *L) {
+  Physics *physics = (Physics *)luaL_checkudata(L, 1, "mt_b2_world");
+  Physics *body_a_phys = (Physics *)luaL_checkudata(L, 2, "mt_b2_body");
+  Physics *body_b_phys = (Physics *)luaL_checkudata(L, 3, "mt_b2_body");
+  luaL_checktype(L, 4, LUA_TTABLE);
+
+  float anchor_x = (float)luax_opt_number_field(L, 4, "anchor_x", 0) / physics->meter;
+  float anchor_y = (float)luax_opt_number_field(L, 4, "anchor_y", 0) / physics->meter;
+
+  b2RevoluteJointDef def;
+  def.Initialize(body_a_phys->body, body_b_phys->body, b2Vec2(anchor_x, anchor_y));
+  def.enableLimit = luax_boolean_field(L, 4, "enable_limit");
+  def.lowerAngle = (float)luax_opt_number_field(L, 4, "lower_angle", 0);
+  def.upperAngle = (float)luax_opt_number_field(L, 4, "upper_angle", 0);
+  def.enableMotor = luax_boolean_field(L, 4, "enable_motor");
+  def.motorSpeed = (float)luax_opt_number_field(L, 4, "motor_speed", 0);
+  def.maxMotorTorque = (float)luax_opt_number_field(L, 4, "max_motor_torque", 0);
+
+  Physics p = physics_weak_copy(physics);
+  p.joint = physics->world->CreateJoint(&def);
+  luax_new_userdata(L, p, "mt_b2_joint");
+  return 1;
+}
+
 static int open_mt_b2_world(lua_State *L) {
   luaL_Reg reg[] = {
       {"__gc", mt_b2_world_gc},
@@ -1210,10 +1296,72 @@ static int open_mt_b2_world(lua_State *L) {
       {"make_dynamic_body", mt_b2_world_make_dynamic_body},
       {"begin_contact", mt_b2_world_begin_contact},
       {"end_contact", mt_b2_world_end_contact},
+      {"presolve", mt_b2_world_presolve},
+      {"postsolve", mt_b2_world_postsolve},
+      {"raycast", mt_b2_world_raycast},
+      {"make_distance_joint", mt_b2_world_make_distance_joint},
+      {"make_revolute_joint", mt_b2_world_make_revolute_joint},
       {nullptr, nullptr},
   };
 
   luax_new_class(L, "mt_b2_world", reg);
+  return 0;
+}
+
+// box2d joint
+
+static int mt_b2_joint_gc(lua_State *L) {
+  Physics *physics = (Physics *)luaL_checkudata(L, 1, "mt_b2_joint");
+  physics->world->DestroyJoint(physics->joint);
+  physics->joint = nullptr;
+  return 0;
+}
+
+static int mt_b2_joint_type(lua_State *L) {
+  Physics *physics = (Physics *)luaL_checkudata(L, 1, "mt_b2_joint");
+  switch (physics->joint->GetType()) {
+    case e_distanceJoint: lua_pushliteral(L, "distance"); break;
+    case e_revoluteJoint: lua_pushliteral(L, "revolute"); break;
+    case e_prismaticJoint: lua_pushliteral(L, "prismatic"); break;
+    case e_mouseJoint: lua_pushliteral(L, "mouse"); break;
+    case e_weldJoint: lua_pushliteral(L, "weld"); break;
+    case e_frictionJoint: lua_pushliteral(L, "friction"); break;
+    case e_wheelJoint: lua_pushliteral(L, "wheel"); break;
+    case e_gearJoint: lua_pushliteral(L, "gear"); break;
+    case e_motorJoint: lua_pushliteral(L, "motor"); break;
+    case e_pulleyJoint: lua_pushliteral(L, "pulley"); break;
+    default: lua_pushliteral(L, "unknown"); break;
+  }
+  return 1;
+}
+
+static int mt_b2_joint_body_a(lua_State *L) {
+  Physics *physics = (Physics *)luaL_checkudata(L, 1, "mt_b2_joint");
+  Physics p = physics_weak_copy((Physics *)luaL_checkudata(L, 1, "mt_b2_joint"));
+  p.body = physics->joint->GetBodyA();
+  luax_new_userdata(L, p, "mt_b2_body");
+  return 1;
+}
+
+static int mt_b2_joint_body_b(lua_State *L) {
+  Physics *physics = (Physics *)luaL_checkudata(L, 1, "mt_b2_joint");
+  Physics p = physics_weak_copy((Physics *)luaL_checkudata(L, 1, "mt_b2_joint"));
+  p.body = physics->joint->GetBodyB();
+  luax_new_userdata(L, p, "mt_b2_body");
+  return 1;
+}
+
+static int open_mt_b2_joint(lua_State *L) {
+  luaL_Reg reg[] = {
+      {"__gc", mt_b2_joint_gc},
+      {"destroy", mt_b2_joint_gc},
+      {"type", mt_b2_joint_type},
+      {"body_a", mt_b2_joint_body_a},
+      {"body_b", mt_b2_joint_body_b},
+      {nullptr, nullptr},
+  };
+
+  luax_new_class(L, "mt_b2_joint", reg);
   return 0;
 }
 
@@ -3003,7 +3151,7 @@ void open_spry_api(lua_State *L) {
       open_mt_image,    open_mt_font,         open_mt_sound,
       open_mt_sprite,   open_mt_atlas_image,  open_mt_atlas,
       open_mt_tilemap,  open_mt_b2_fixture,   open_mt_b2_body,
-      open_mt_b2_world, open_mt_mu_container, open_mt_mu_style,
+      open_mt_b2_world, open_mt_b2_joint, open_mt_mu_container, open_mt_mu_style,
       open_mt_mu_ref,
   };
 

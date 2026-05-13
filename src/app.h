@@ -62,6 +62,8 @@ struct App {
   void *miniaudio_vfs;
   ma_engine audio_engine;
   Array<Sound *> garbage_sounds;
+  i32 audio_channels = 2;
+  i32 audio_sample_rate = 44100;
 };
 
 extern App *g_app;

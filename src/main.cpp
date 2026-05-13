@@ -69,8 +69,8 @@ static void init() {
     g_app->miniaudio_vfs = vfs_for_miniaudio();
 
     ma_engine_config ma_config = ma_engine_config_init();
-    ma_config.channels = 2;
-    ma_config.sampleRate = 44100;
+    ma_config.channels = (ma_uint32)g_app->audio_channels;
+    ma_config.sampleRate = (ma_uint32)g_app->audio_sample_rate;
     ma_config.pResourceManagerVFS = g_app->miniaudio_vfs;
     ma_result res = ma_engine_init(&ma_config, &g_app->audio_engine);
     if (res != MA_SUCCESS) {
@@ -375,6 +375,8 @@ static void actually_cleanup() {
     }
     g_app->garbage_sounds.trash();
 
+    sound_cache_trash();
+
     assets_shutdown();
   }
 
@@ -597,6 +599,8 @@ sapp_desc sokol_main(int argc, char **argv) {
   lua_Number swap_interval = luax_opt_number_field(L, -1, "swap_interval", 1);
   lua_Number target_fps = luax_opt_number_field(L, -1, "target_fps", 0);
   lua_Number width = luax_opt_number_field(L, -1, "window_width", 800);
+  g_app->audio_channels = (i32)luax_opt_number_field(L, -1, "audio_channels", 2);
+  g_app->audio_sample_rate = (i32)luax_opt_number_field(L, -1, "audio_sample_rate", 44100);
   lua_Number height = luax_opt_number_field(L, -1, "window_height", 600);
   String title = luax_opt_string_field(L, -1, "window_title", "Spry");
 
