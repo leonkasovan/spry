@@ -323,7 +323,7 @@ static void apply_mapping(Joystick *j, GamepadMapping *m, float deadzone) {
 }
 
 // ============================================================================
-// Platform: Windows (XInput)
+// Platform: Windows (XInput - dynamically loaded)
 // ============================================================================
 
 #if defined(IS_WIN32)
@@ -332,21 +332,113 @@ static void apply_mapping(Joystick *j, GamepadMapping *m, float deadzone) {
 #define WIN32_LEAN_AND_MEAN
 #endif
 #include <windows.h>
-#include <xinput.h>
+
+// XInput structures and constants (from xinput.h)
+#define XINPUT_GAMEPAD_DPAD_UP          0x0001
+#define XINPUT_GAMEPAD_DPAD_DOWN        0x0002
+#define XINPUT_GAMEPAD_DPAD_LEFT        0x0004
+#define XINPUT_GAMEPAD_DPAD_RIGHT       0x0008
+#define XINPUT_GAMEPAD_START            0x0010
+#define XINPUT_GAMEPAD_BACK             0x0020
+#define XINPUT_GAMEPAD_LEFT_THUMB       0x0040
+#define XINPUT_GAMEPAD_RIGHT_THUMB      0x0080
+#define XINPUT_GAMEPAD_LEFT_SHOULDER    0x0100
+#define XINPUT_GAMEPAD_RIGHT_SHOULDER   0x0200
+#define XINPUT_GAMEPAD_A                0x1000
+#define XINPUT_GAMEPAD_B                0x2000
+#define XINPUT_GAMEPAD_X                0x4000
+#define XINPUT_GAMEPAD_Y                0x8000
+
+#define XINPUT_DLL_A 0x00000000
+#define XINPUT_DLL_1_4 0x00000004
+#define XINPUT_DLL_1_3 0x00000003
+
+typedef struct {
+  WORD wLeftMotorSpeed;
+  WORD wRightMotorSpeed;
+} XINPUT_VIBRATION;
+
+typedef struct {
+  WORD wButtons;
+  BYTE bLeftTrigger;
+  BYTE bRightTrigger;
+  SHORT sThumbLX;
+  SHORT sThumbLY;
+  SHORT sThumbRX;
+  SHORT sThumbRY;
+} XINPUT_GAMEPAD;
+
+typedef struct {
+  DWORD dwPacketNumber;
+  XINPUT_GAMEPAD Gamepad;
+} XINPUT_STATE;
+
+// Function pointer types
+typedef DWORD(WINAPI *XInputGetStateFn)(DWORD dwUserIndex, XINPUT_STATE *pState);
+typedef DWORD(WINAPI *XInputSetStateFn)(DWORD dwUserIndex, XINPUT_VIBRATION *pVibration);
+
+// Global state for dynamic loading
+static HMODULE g_xinput_module = nullptr;
+static XInputGetStateFn g_XInputGetState = nullptr;
+static XInputSetStateFn g_XInputSetState = nullptr;
+
+static bool load_xinput() {
+  if (g_xinput_module) {
+    return true;  // Already loaded
+  }
+
+  // Try XINPUT1_4 first (Windows Vista+)
+  g_xinput_module = LoadLibraryA("xinput1_4.dll");
+  if (!g_xinput_module) {
+    // Fallback to XINPUT1_3 (Windows XP+)
+    g_xinput_module = LoadLibraryA("xinput1_3.dll");
+  }
+
+  if (!g_xinput_module) {
+    return false;  // XInput not available
+  }
+
+  // Get function pointers
+  g_XInputGetState = (XInputGetStateFn)GetProcAddress(g_xinput_module, "XInputGetState");
+  g_XInputSetState = (XInputSetStateFn)GetProcAddress(g_xinput_module, "XInputSetState");
+
+  if (!g_XInputGetState || !g_XInputSetState) {
+    FreeLibrary(g_xinput_module);
+    g_xinput_module = nullptr;
+    return false;
+  }
+
+  return true;
+}
+
+static void unload_xinput() {
+  if (g_xinput_module) {
+    FreeLibrary(g_xinput_module);
+    g_xinput_module = nullptr;
+    g_XInputGetState = nullptr;
+    g_XInputSetState = nullptr;
+  }
+}
 
 void gamepad_init(GamepadState *state) {
   memset(state, 0, sizeof(GamepadState));
   state->deadzone = 0.15f;
   state->mappings = {};
+  load_xinput();  // Try to load XInput at startup
 }
 
 void gamepad_update(GamepadState *state) {
+  if (!g_XInputGetState) {
+    // XInput not available, skip gamepad updates
+    return;
+  }
+
   for (DWORD i = 0; i < MAX_JOYSTICKS; i++) {
     Joystick *j = &state->joysticks[i];
     XINPUT_STATE xs;
     memset(&xs, 0, sizeof(xs));
 
-    if (XInputGetState(i, &xs) == ERROR_SUCCESS) {
+    if (g_XInputGetState(i, &xs) == ERROR_SUCCESS) {
       j->connected = true;
       j->is_gamepad = true;
       j->platform_handle = (i64)i;
@@ -415,6 +507,9 @@ void gamepad_update(GamepadState *state) {
 void gamepad_set_vibration(GamepadState *state, i32 index, float left,
                            float right, float duration) {
   (void)duration; // XInput doesn't natively support timed vibration.
+  if (!g_XInputSetState) {
+    return;  // XInput not available
+  }
   if (index < 0 || index >= MAX_JOYSTICKS) {
     return;
   }
@@ -424,14 +519,12 @@ void gamepad_set_vibration(GamepadState *state, i32 index, float left,
   XINPUT_VIBRATION vib;
   vib.wLeftMotorSpeed = (WORD)(left * 65535.0f);
   vib.wRightMotorSpeed = (WORD)(right * 65535.0f);
-  XInputSetState((DWORD)index, &vib);
+  g_XInputSetState((DWORD)index, &vib);
 }
 
 void gamepad_shutdown(GamepadState *state) {
-  for (i32 i = 0; i < MAX_JOYSTICKS; i++) {
-    gamepad_set_vibration(state, i, 0, 0, 0);
-  }
-  state->mappings.trash();
+  (void)state;
+  unload_xinput();
 }
 
 // ============================================================================

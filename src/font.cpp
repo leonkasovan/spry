@@ -116,7 +116,9 @@ static void make_font_range(FontRange *out, FontFamily *font, FontKey key) {
   out->image.width = width;
   out->image.height = height;
 
+#ifndef NDEBUG
   printf("created font range with id %d\n", id);
+#endif
 }
 
 static FontRange *get_range(FontFamily *font, FontKey key) {

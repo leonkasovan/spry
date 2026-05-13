@@ -87,8 +87,10 @@ bool Image::load(String filepath, bool generate_mips) {
   img.has_mips = generate_mips;
   *this = img;
 
+#ifndef NDEBUG
   printf("created image (%dx%d, %d channels, mipmaps: %s) with id %d\n", width,
          height, channels, generate_mips ? "true" : "false", id);
+#endif
   return true;
 }
 

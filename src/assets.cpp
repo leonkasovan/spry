@@ -126,7 +126,9 @@ void assets_perform_hot_reload_changes() {
     }
 
     asset_write(a);
+#ifndef NDEBUG
     printf("reloaded: %s\n", a.name.data);
+#endif
   }
 
   g_assets.changes.len = 0;

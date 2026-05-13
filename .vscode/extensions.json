@@ -1,0 +1,8 @@
+{
+  "recommendations": [
+    "ms-vscode.cpptools-extension-pack",
+    "sumneko.lua",
+    "ms-vscode.cmake-tools",
+    "xaver.clang-format"
+  ]
+}

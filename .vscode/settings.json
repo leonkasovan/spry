@@ -1,9 +1,9 @@
 {
   "terminal.integrated.profiles.windows": {
     "w64devkit": {
-      "path": "F:/w64devkit/bin/sh.exe",
+      "path": "C:/w64devkit/bin/sh.exe",
       "env": {
-        "PATH": "F:\\w64devkit\\bin;F:\\go-go1.25.4\\bin"
+        "PATH": "C:\\w64devkit\\bin;C:\\go-go1.25.4\\bin"
       },
       "cwd": "${workspaceFolder}"
     },
@@ -16,7 +16,7 @@
       "icon": "terminal-cmd"
     },
     "MinGW64": {
-      "path": "F:/msys2/usr/bin/bash.exe",
+      "path": "C:/msys2/usr/bin/bash.exe",
       "args": [
         "--login",
         "-i"
@@ -27,5 +27,5 @@
       }
     }
   },
-  "terminal.integrated.defaultProfile.windows": "VS2022 x64 Native DevCmd"
+  "terminal.integrated.defaultProfile.windows": "w64devkit"
 }

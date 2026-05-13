@@ -183,7 +183,7 @@ function footer(string $class) {
   ?>
   <footer class="flex flex-wrap center mv5 <?= $class ?>">
     <div class="w-100 mr-auto pv3 w-auto-ns silver dm-mid-gray">
-      &copy; 2023 Jason Liang
+      &copy; 2023&ndash;2026 Jason Liang
     </div>
     <a href="docs.html" class="gray link underline-hover mr3 pv3 dib">
       API Reference

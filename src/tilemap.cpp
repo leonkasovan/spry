@@ -230,8 +230,10 @@ bool Tilemap::load(String filepath) {
   tilemap.levels = levels;
   tilemap.images = images;
 
+#ifndef NDEBUG
   printf("loaded tilemap with %llu levels\n",
          (unsigned long long)tilemap.levels.len);
+#endif
   *this = tilemap;
   created = true;
   return true;
@@ -390,7 +392,7 @@ static void make_graph_for_layer(HashMap<TileNode> *graph, TilemapLayer *layer,
       if (cost > 0) {
         TileNode node = {};
         node.x = (i32)(x + world_x);
-        node.y = (i32)(y + world_x);
+        node.y = (i32)(y + world_y);
         node.cost = cost;
 
         (*graph)[tile_key(node.x, node.y)] = node;

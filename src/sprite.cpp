@@ -88,8 +88,10 @@ bool SpriteData::load(String filepath) {
     by_tag[fnv1a(tag.name)] = loop;
   }
 
+#ifndef NDEBUG
   printf("created sprite with image id: %d and %llu frames\n", img.id,
          (unsigned long long)frames.len);
+#endif
 
   SpriteData s = {};
   s.arena = arena;

@@ -66,6 +66,14 @@ struct App {
 
 extern App *g_app;
 
+inline FontFamily *load_default_font() {
+  if (g_app->default_font == nullptr) {
+    g_app->default_font = (FontFamily *)mem_alloc(sizeof(FontFamily));
+    g_app->default_font->load_default();
+  }
+  return g_app->default_font;
+}
+
 inline void fatal_error(String str) {
   if (!g_app->error_mode.load()) {
     LockGuard lock{&g_app->error_mtx};

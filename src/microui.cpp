@@ -70,7 +70,22 @@ static char mui_key_map(sapp_keycode code) {
 void microui_sokol_event(const sapp_event *e) {
   switch (e->type) {
   case SAPP_EVENTTYPE_CHAR: {
-    char str[2] = {(char)(e->char_code % 256), 0};
+    char str[5] = {};
+    if (e->char_code <= 0x7F) {
+      str[0] = (char)e->char_code;
+    } else if (e->char_code <= 0x7FF) {
+      str[0] = (char)(0xC0 | (e->char_code >> 6));
+      str[1] = (char)(0x80 | (e->char_code & 0x3F));
+    } else if (e->char_code <= 0xFFFF) {
+      str[0] = (char)(0xE0 | (e->char_code >> 12));
+      str[1] = (char)(0x80 | ((e->char_code >> 6) & 0x3F));
+      str[2] = (char)(0x80 | (e->char_code & 0x3F));
+    } else if (e->char_code <= 0x10FFFF) {
+      str[0] = (char)(0xF0 | (e->char_code >> 18));
+      str[1] = (char)(0x80 | ((e->char_code >> 12) & 0x3F));
+      str[2] = (char)(0x80 | ((e->char_code >> 6) & 0x3F));
+      str[3] = (char)(0x80 | (e->char_code & 0x3F));
+    }
     mu_input_text(g_mui_state.ctx, str);
     break;
   }

@@ -1,5 +1,4 @@
 function spry.start()
---   font = spry.font_load 'roboto.ttf'
   font = spry.default_font()
 end
 

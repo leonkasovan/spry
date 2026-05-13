@@ -1,5 +1,9 @@
 -xc++-header
 -std=c++17
 -Wall
+-DNDEBUG
+-Isrc
+-Isrc/deps
 -Isrc/deps/box2d
 -Isrc/deps/lua
+-Isrc/deps/luasocket

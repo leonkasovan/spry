@@ -31,6 +31,7 @@ void http_shutdown(void) {}
 #include "sync.h"
 
 #include <atomic>
+#include <chrono>
 #include <string.h>
 
 #ifndef IS_WIN32
@@ -99,6 +100,12 @@ static int socket_error() { return errno; }
 // ============================================================
 #ifdef IS_WIN32
 #define SECURITY_WIN32
+
+#ifdef NDEBUG
+#define TLS_DEBUG(...)
+#else
+#define TLS_DEBUG(...) fprintf(stderr, __VA_ARGS__)
+#endif
 #include <security.h>
 #include <schannel.h>
 #include <wincrypt.h>
@@ -112,7 +119,9 @@ static bool g_cred_initialized = false;
 static bool _tls_init(char *err, size_t errlen) {
   if (g_cred_initialized) return true;
 
+#ifndef NDEBUG
   fprintf(stderr, "[TLS] Initializing SChannel credentials...\n");
+#endif
 
   SCHANNEL_CRED schannel_cred = {};
   schannel_cred.dwVersion = SCHANNEL_CRED_VERSION;
@@ -134,7 +143,9 @@ static bool _tls_init(char *err, size_t errlen) {
       &g_cred_handle,
       &ts);
 
+#ifndef NDEBUG
   fprintf(stderr, "[TLS] AcquireCredentialsHandleA returned: 0x%08lx\n", status);
+#endif
 
   if (status != SEC_E_OK) {
     if (err && errlen > 0) {
@@ -512,7 +523,7 @@ static bool _schannel_handshake(Connection *conn, const char *hostname,
     return false;
   }
 
-  fprintf(stderr, "[TLS] Starting handshake with %s\n", hostname);
+  TLS_DEBUG("[TLS] Starting handshake with %s\n", hostname);
 
   ULONG context_req =
       ISC_REQ_SEQUENCE_DETECT | ISC_REQ_CONFIDENTIALITY | ISC_REQ_INTEGRITY |
@@ -541,7 +552,7 @@ static bool _schannel_handshake(Connection *conn, const char *hostname,
   
   // Perform the TLS handshake loop
   for (int i = 0; i < 100; i++) {  // max 100 iterations to prevent infinite loop
-    fprintf(stderr, "[TLS] Iteration %d, initial=%d, receive_len=%d\n", i, initial, receive_len);
+    TLS_DEBUG("[TLS] Iteration %d, initial=%d, receive_len=%d\n", i, initial, receive_len);
     // Setup output buffer for this iteration
     out_buffers[0].BufferType = SECBUFFER_TOKEN;
     out_buffers[0].cbBuffer = 0;
@@ -571,13 +582,13 @@ static bool _schannel_handshake(Connection *conn, const char *hostname,
         &context_attr,
         &ts);
     
-    fprintf(stderr, "[TLS] InitializeSecurityContextA returned: 0x%08lx, out_buffer_size=%lu\n", 
+    TLS_DEBUG("[TLS] InitializeSecurityContextA returned: 0x%08lx, out_buffer_size=%lu\n", 
             status, out_buffers[0].cbBuffer);
     
     initial = false;
     
     if (status == SEC_E_OK) {
-      fprintf(stderr, "[TLS] Handshake complete (SEC_E_OK)\n");
+      TLS_DEBUG("[TLS] Handshake complete (SEC_E_OK)\n");
       // Handshake complete - send final token if any
       if (out_buffers[0].cbBuffer > 0) {
         int sent = (int)send(conn->sock, (const char *)out_buffers[0].pvBuffer,
@@ -610,15 +621,15 @@ static bool _schannel_handshake(Connection *conn, const char *hostname,
       
       return true;
     } else if (status == SEC_I_CONTINUE_NEEDED || status == SEC_E_INCOMPLETE_MESSAGE) {
-      fprintf(stderr, "[TLS] Continue needed (status=0x%08lx), sending token...\n", status);
+      TLS_DEBUG("[TLS] Continue needed (status=0x%08lx), sending token...\n", status);
 
       if (status == SEC_E_INCOMPLETE_MESSAGE) {
         // SEC_E_INCOMPLETE_MESSAGE: SChannel consumed NOTHING.
         // The entire receive_buffer is still valid — just append more data.
-        fprintf(stderr, "[TLS] Incomplete message, keeping %d bytes and reading more\n", receive_len);
+        TLS_DEBUG("[TLS] Incomplete message, keeping %d bytes and reading more\n", receive_len);
         int recvd = (int)recv(conn->sock, receive_buffer + receive_len,
                               sizeof(receive_buffer) - receive_len, 0);
-        fprintf(stderr, "[TLS] Received %d bytes from server (appended to %d)\n", recvd, receive_len);
+        TLS_DEBUG("[TLS] Received %d bytes from server (appended to %d)\n", recvd, receive_len);
         if (recvd <= 0) {
           if (err && errlen > 0) {
             snprintf(err, errlen, "Failed to receive TLS handshake response");
@@ -632,7 +643,7 @@ static bool _schannel_handshake(Connection *conn, const char *hostname,
         if (out_buffers[0].cbBuffer > 0) {
           int sent = (int)send(conn->sock, (const char *)out_buffers[0].pvBuffer,
                                (int)out_buffers[0].cbBuffer, 0);
-          fprintf(stderr, "[TLS] Sent %d bytes to server\n", sent);
+          TLS_DEBUG("[TLS] Sent %d bytes to server\n", sent);
           if (sent <= 0) {
             if (err && errlen > 0) {
               snprintf(err, errlen, "Failed to send TLS handshake token");
@@ -653,7 +664,7 @@ static bool _schannel_handshake(Connection *conn, const char *hostname,
         for (int j = 0; j < 2; j++) {
           if (in_buffers[j].BufferType == SECBUFFER_EXTRA && in_buffers[j].cbBuffer > 0) {
             extra_len = (int)in_buffers[j].cbBuffer;
-            fprintf(stderr, "[TLS] Found SECBUFFER_EXTRA: %d bytes\n", extra_len);
+            TLS_DEBUG("[TLS] Found SECBUFFER_EXTRA: %d bytes\n", extra_len);
             // Move extra data to beginning of buffer
             memmove(receive_buffer, 
                     receive_buffer + (receive_len - extra_len),
@@ -665,12 +676,12 @@ static bool _schannel_handshake(Connection *conn, const char *hostname,
         if (extra_len > 0) {
           // We have extra data, use it for next iteration without receiving
           receive_len = extra_len;
-          fprintf(stderr, "[TLS] Using buffered EXTRA data for next iteration\n");
+          TLS_DEBUG("[TLS] Using buffered EXTRA data for next iteration\n");
         } else {
           // Need fresh data from server
           int recvd = (int)recv(conn->sock, receive_buffer, 
                                 sizeof(receive_buffer), 0);
-          fprintf(stderr, "[TLS] Received %d bytes from server\n", recvd);
+          TLS_DEBUG("[TLS] Received %d bytes from server\n", recvd);
           if (recvd <= 0) {
             if (err && errlen > 0) {
               snprintf(err, errlen, "Failed to receive TLS handshake response");
@@ -682,7 +693,7 @@ static bool _schannel_handshake(Connection *conn, const char *hostname,
       }
       // Continue loop to process the received data
     } else {
-      fprintf(stderr, "[TLS] Handshake failed with status: 0x%08lx\n", status);
+      TLS_DEBUG("[TLS] Handshake failed with status: 0x%08lx\n", status);
       if (err && errlen > 0) {
         snprintf(err, errlen, "TLS handshake failed: 0x%lx", status);
       }
@@ -1101,8 +1112,15 @@ static u64 _hex_to_u64(const char *s) {
   return val;
 }
 
+static bool _timeout_expired(HttpRequest *req, std::chrono::steady_clock::time_point start) {
+  if (req->timeout_secs <= 0) return false;
+  auto elapsed = std::chrono::duration<float>(std::chrono::steady_clock::now() - start).count();
+  return elapsed >= req->timeout_secs;
+}
+
 static void _http_worker(void *udata) {
   HttpRequest *req = (HttpRequest *)udata;
+  auto _start_time = std::chrono::steady_clock::now();
   req->response_body.init();
   req->response_headers_raw.init();
   req->status_code = 0;
@@ -1127,8 +1145,10 @@ static void _http_worker(void *udata) {
 #endif
       fclose(f);
       if (resume_offset > 0) {
+#ifndef NDEBUG
         fprintf(stderr, "[HTTP] Resume: existing file %s is %lld bytes\n",
                 req->output_path, (long long)resume_offset);
+#endif
       }
     }
   }
@@ -1144,6 +1164,12 @@ static void _http_worker(void *udata) {
   static const int MAX_REDIRECTS = 10;
 
   for (int redirect_count = 0; redirect_count <= MAX_REDIRECTS; redirect_count++) {
+    if (_timeout_expired(req, _start_time)) {
+      snprintf(req->error, sizeof(req->error), "request timed out");
+      ::free(current_url);
+      req->state.store(2, std::memory_order_release);
+      return;
+    }
 
   ParsedUrl url;
   if (!_url_parse(current_url, &url)) {
@@ -1358,7 +1384,9 @@ static void _http_worker(void *udata) {
         return;
       }
 
+#ifndef NDEBUG
       fprintf(stderr, "[HTTP] Redirect %d: %s -> %s\n", req->status_code, current_url, new_url);
+#endif
       ::free(current_url);
       current_url = new_url;
 
@@ -1392,12 +1420,16 @@ static void _http_worker(void *udata) {
           i64 total = content_length + resume_offset;
           req->content_length.store(total, std::memory_order_relaxed);
         }
+#ifndef NDEBUG
         fprintf(stderr, "[HTTP] Resuming at offset %lld (status 206)\n", (long long)resume_offset);
+#endif
       }
     } else {
       // Fresh download (200), or override, or server doesn't support Range
       if (resume_offset > 0 && req->status_code == 200) {
+#ifndef NDEBUG
         fprintf(stderr, "[HTTP] Server returned 200 (no Range support), restarting download\n");
+#endif
       }
       out_file = fopen(req->output_path, "wb");
       resume_offset = 0; // not resuming
@@ -1427,6 +1459,15 @@ static void _http_worker(void *udata) {
         u64 remaining = chunk_size;
         char buf[4096];
         while (remaining > 0) {
+          if (_timeout_expired(req, _start_time)) {
+            snprintf(req->error, sizeof(req->error), "request timed out");
+            line.trash();
+            _conn_close(&conn);
+            fclose(out_file);
+            ::free(current_url);
+            req->state.store(2, std::memory_order_release);
+            return;
+          }
           int chunk = (int)(remaining > sizeof(buf) ? sizeof(buf) : remaining);
           int n = _conn_read(&conn, buf, chunk);
           if (n <= 0) {
@@ -1465,11 +1506,20 @@ static void _http_worker(void *udata) {
     }
   } else if (content_length >= 0) {
     if (out_file) {
-      u64 remaining = (u64)content_length;
-      char buf[4096];
-      while (remaining > 0) {
-        int chunk = (int)(remaining > sizeof(buf) ? sizeof(buf) : remaining);
-        int n = _conn_read(&conn, buf, chunk);
+        u64 remaining = (u64)content_length;
+        char buf[4096];
+        while (remaining > 0) {
+          if (_timeout_expired(req, _start_time)) {
+            snprintf(req->error, sizeof(req->error), "request timed out");
+            line.trash();
+            _conn_close(&conn);
+            fclose(out_file);
+            ::free(current_url);
+            req->state.store(2, std::memory_order_release);
+            return;
+          }
+          int chunk = (int)(remaining > sizeof(buf) ? sizeof(buf) : remaining);
+          int n = _conn_read(&conn, buf, chunk);
         if (n <= 0) {
           snprintf(req->error, sizeof(req->error), "failed to read body");
           line.trash();
@@ -1504,6 +1554,15 @@ static void _http_worker(void *udata) {
     // read until connection closes
     char buf[4096];
     while (true) {
+      if (_timeout_expired(req, _start_time)) {
+        snprintf(req->error, sizeof(req->error), "request timed out");
+        line.trash();
+        _conn_close(&conn);
+        if (out_file) fclose(out_file);
+        ::free(current_url);
+        req->state.store(2, std::memory_order_release);
+        return;
+      }
       int n = _conn_read(&conn, buf, sizeof(buf));
       if (n <= 0) break;
       if (out_file) {

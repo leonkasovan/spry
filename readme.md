@@ -39,21 +39,32 @@ non-exhaustive list of differences between the two:
 - LÖVE is mature, stable, and battle-tested.
 - LÖVE uses `conf.lua` for configuration options. Spry does not need a
   separate config file.
-- LÖVE has more overall features, such as system threads, touchscreen support,
-  filesystem access, gamepad input, and networking sockets.
+- LÖVE has more overall features, such as touchscreen support and
+  filesystem access. Spry also has gamepad input, networking sockets,
+  system threads, and HTTP/HTTPS support.
 
 ## Run the examples
 
-This repository includes some project examples. You can run them with the
-following commands:
+This repository includes project examples. You can run them with:
 
 ```sh
-spry examples/basic
-spry examples/planes
-spry examples/dungeon
-spry examples/jump
-spry examples/boxes
-spry examples/nuklear_demo
+spry examples/basic          # Basic image loading and input
+spry examples/planes         # Top-down shmup with atlas/sprites
+spry examples/dungeon        # Dungeon game with tilemaps and A*
+spry examples/jump           # Platformer with physics and LDtk
+spry examples/boxes          # Box2D physics demo
+spry examples/nuklear_demo   # Nuklear UI demo
+spry examples/microui        # Microui UI demo
+spry examples/ecs            # Entity Component System pattern
+spry examples/gamepad        # Gamepad/joystick API demo
+spry examples/http           # HTTP client demo
+spry examples/inheritance    # Class inheritance system demo
+spry examples/novel          # Visual novel demo
+spry examples/particles      # Particle effects
+spry examples/particle_maker # Interactive particle editor
+spry examples/pathfinding    # A* pathfinding demo
+spry examples/sampler        # Sound playback demo
+spry examples/networking     # UDP multiplayer demo (start server too)
 ```
 
 Spry can also run single Lua files:

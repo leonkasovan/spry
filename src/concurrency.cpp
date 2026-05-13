@@ -170,6 +170,7 @@ void LuaVariant::trash() {
       e.value.trash();
     }
     mem_free(table.data);
+    break;
   }
   case LUA_TUSERDATA: {
     mem_free(udata.tname.data);

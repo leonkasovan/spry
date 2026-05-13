@@ -178,10 +178,7 @@ static void render() {
   }
 
   if (g_app->error_mode.load()) {
-    if (g_app->default_font == nullptr) {
-      g_app->default_font = (FontFamily *)mem_alloc(sizeof(FontFamily));
-      g_app->default_font->load_default();
-    }
+    load_default_font();
 
     renderer_reset();
 

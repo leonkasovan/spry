@@ -2003,10 +2003,14 @@ static int spry_fatal_error(lua_State *L) {
 static int spry_platform(lua_State *L) {
 #if defined(IS_HTML5)
   lua_pushliteral(L, "html5");
+#elif defined(IS_ANDROID)
+  lua_pushliteral(L, "android");
 #elif defined(IS_WIN32)
   lua_pushliteral(L, "windows");
 #elif defined(IS_LINUX)
   lua_pushliteral(L, "linux");
+#else
+  lua_pushliteral(L, "unknown");
 #endif
   return 1;
 }
@@ -2520,13 +2524,11 @@ static int spry_scissor_rect(lua_State *L) {
 static int spry_push_matrix(lua_State *L) {
   bool ok = renderer_push_matrix();
   return ok ? 0 : luaL_error(L, "matrix stack is full");
-  return 0;
 }
 
 static int spry_pop_matrix(lua_State *L) {
   bool ok = renderer_pop_matrix();
-  return ok ? 0 : luaL_error(L, "matrix stack is full");
-  return 0;
+  return ok ? 0 : luaL_error(L, "matrix stack is empty");
 }
 
 static int spry_translate(lua_State *L) {
@@ -2591,12 +2593,7 @@ static int spry_pop_color(lua_State *L) {
 }
 
 static int spry_default_font(lua_State *L) {
-  if (g_app->default_font == nullptr) {
-    g_app->default_font = (FontFamily *)mem_alloc(sizeof(FontFamily));
-    g_app->default_font->load_default();
-  }
-
-  luax_ptr_userdata(L, g_app->default_font, "mt_font");
+  luax_ptr_userdata(L, load_default_font(), "mt_font");
   return 1;
 }
 
@@ -2723,7 +2720,7 @@ static int spry_file_write(lua_State *L) {
   defer(fclose(f));
 
   size_t written = fwrite(contents.data, 1, contents.len, f);
-  bool ok = written < contents.len;
+  bool ok = written == contents.len;
 
   lua_pushboolean(L, ok);
   return 1;
