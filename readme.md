@@ -98,15 +98,29 @@ OR
 cmake -B build -DUSE_DRM=ON (use DRM backend)
 OR
 cmake -B build -DUSE_WAYLAND=ON (use Wayland backend)
-cmake --build build -- -j8
+OR
+cmake -B build . -DCMAKE_BUILD_TYPE=Release
+cmake -B build . -DCMAKE_BUILD_TYPE=Debug
+
+cmake --build build --parallel
 ```
 
-Build for Windows (using VS 2022)
+Build for Windows (using VS 2022, multi config)
 ```sh
 cmake -B build
 cmake --build build
+cmake --build build --config Debug
 OR
 cmake --build build --config Release
+```
+
+Build for Windows (using w64devkit)
+```sh
+cmake -B build-w64devkit-release -G Ninja -DCMAKE_BUILD_TYPE=Release
+cmake --build build-w64devkit-release --parallel
+OR
+cmake -B build-w64devkit-debug -G Ninja -DCMAKE_BUILD_TYPE=Debug
+cmake --build build-w64devkit-debug --parallel
 ```
 
 The first `cmake` command might need extra flags depending on the environment.
